@@ -12,8 +12,8 @@
 
 (defn join-url
   ([url] url)
-  ([a b] (str (if (= \/ (last a)) a (str a \/))
-              (if (= \/ (first b)) (subs b 1 (count b)) b)))
+  ([a b] (str (if (= \/ (last a)) (subs a 0 (dec (count a))) a)
+              (if (#{\. \/} (first b)) b (str \/ b))))
   ([a b c & more] (apply join-url (join-url a b) c more)))
 
 (defn finalize-command [command]
@@ -26,21 +26,18 @@
                  (cond
                    (re-find #"^http" url) (throw ())
                    url
-                   (join-url @*url-root (:url command))))}))
+                   (join-url @*url-root (:url command) ".edn")))}))
 
 (defn make-request [command]
-  (-> command
-    finalize-command
-    client/request
-    :body
-    (json/read-str :key-fn keyword)))
+  (binding [*read-eval* false]
+    (-> command
+      finalize-command
+      client/request
+      :body
+      read-string)))
 
 (defn get-vec [url]
-  (-> {:method :get :url url}
-    finalize-command
-    client/request
-    :body
-    (json/read-str :key-fn keyword)))
+  (make-request {:method :get :url url}))
 
 (defn get-one [url]
   (first (get-vec url)))
