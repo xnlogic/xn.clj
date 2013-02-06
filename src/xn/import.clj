@@ -5,7 +5,7 @@
 
 (defn api-url-regex []
   (let [url (s/replace @xn/*url-root #"/v1$" "")]
-    (re-pattern (str #"^(" url #"|http://localhost:\d+)(/v1)?"))))
+    (re-pattern (str "^(" url "|http://localhost:\\d+)(/v1)?"))))
 
 (def file-lines (comp s/split-lines slurp))
 
