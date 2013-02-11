@@ -116,6 +116,16 @@
                                         " Subnets: " (count (mapcat :subnets zones)) ")")}}))]
     id))
 
+(defn update-dc [xnid dc pods zones]
+  (let [[id valn record]
+        (info :update-dc (xn/execute {:method :patch :url xnid
+                     :body {:notes (str "Imported from NMDB ID: " (:id dc) "\"" (:name dc) "\""
+                                        " (Pods: " (count pods)
+                                        " Zones: " (count zones)
+                                        " VLANs: " (count (mapcat :vlans zones))
+                                        " Subnets: " (count (mapcat :subnets zones)) ")")}}))]
+    id))
+
 (defn load-dc [dc xnid-map]
   (let [xnid (:datacenter_xnid dc)
         xnid (when (not= "" xnid) xnid)
@@ -129,7 +139,9 @@
         zones (apply concat (:pods dc))
         pods (group-by :pod zones)
         dc-id (if xnid
-                (last (s/split xnid #"/"))
+                (do
+                  (update-dc xnid dc pods zones)
+                  (last (s/split xnid #"/")))
                 (create-dc dc pods zones))]
     (doseq [[name zones] pods]
       (create-pod name dc-id zones subnets))))
@@ -153,18 +165,21 @@
   (when-not (re-find #"^sample" @xn/*token)
     (throw (Exception. "Run the test into a sample app")))
   (let [xnid-map (atom {})]
+    (println " -----------------------------------")
+    (println " Creating some 'existing data'")
+    (println " -----------------------------------")
     (doseq [dc (dcs filename)]
       (let [xnid (:datacenter_xnid dc)
             xnid (when (not= "" xnid) xnid)]
 
         (when xnid
-          (let [[dc-id & _] (info :sample-dc (xn/execute {:method :put :url "model/datacenter"
-                                                          :name (str "a test dc " xnid)}))
+          (let [dc-id (create-dc dc [] [])
                 zones (apply concat (:pods dc))
                 subnets (drop 1 (take 10 (mapcat :subnets zones)))]
             (swap! xnid-map assoc xnid (str "/model/datacenter/" dc-id))
             (doseq [subnet subnets]
               (create-subnet subnet dc-id))))))
     (println " -----------------------------------")
+    (println " Running the regular import")
     (println " -----------------------------------")
     (load! filename @xnid-map)))
