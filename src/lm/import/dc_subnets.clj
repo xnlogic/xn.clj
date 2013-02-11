@@ -8,7 +8,7 @@
 
 (defn info [name [id valn record :as result]]
   (if id
-    (println (str "Executed " name ": id " id " (" (count valn) " errors)"))
+    (println (str "Executed " name ": id " id " (" (s/join ", " valn) ")"))
     (do
       (println (str name " did not get an id:"))
       (pp/pprint result)))
@@ -78,9 +78,6 @@
 
 (defn create-zone [{:keys [name id subnets vlans]} pod-id existing-subnets]
   (let [subnets (group-by (comp boolean existing-subnets :subnet) subnets)
-        _ (when-not (empty existing-subnets)
-            (pp/pprint subnets)
-            (throw (Exception. "stop")))
         sn-to-create (subnets false)
         sn-to-update (subnets true)
         [zone-id valn record]
