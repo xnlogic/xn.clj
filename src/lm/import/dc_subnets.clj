@@ -80,13 +80,14 @@
   (let [subnets (group-by (comp boolean existing-subnets :subnet) subnets)
         sn-to-create (subnets false)
         sn-to-update (subnets true)
-        [zone-id valn record]
-        (xn/execute {:method :put :url "model/zone"
-                     :body {:name name
-                            :parent_zone pod-id
-                            :notes (str "Imported from NMDB ID: " id
-                                        " (VLANs: " (count vlans)
-                                        " Subnets: " (count subnets) ")")}})]
+        [zone-id valn record] (if (= "n/a" name)
+                                [pod-id nil nil]
+                                (xn/execute {:method :put :url "model/zone"
+                                             :body {:name name
+                                                    :parent_zone pod-id
+                                                    :notes (str "Imported from NMDB ID: " id
+                                                                " (VLANs: " (count vlans)
+                                                                " Subnets: " (count subnets) ")")}}))]
     (doseq [subnet sn-to-update]
       (update-subnet subnet zone-id (existing-subnets (:subnet subnet))))
     (doseq [subnet sn-to-create]
