@@ -73,3 +73,15 @@
 ; More elaborite logic that understands :set :add and :remove is possible but
 ; overkill for now.
 (def merge-attrs (partial merge-with merge))
+
+(defn md
+  ([name]
+   (->> (join-url name "metadata")
+     get-vec
+     (map (fn [[k v]]
+            (if (map? v)
+              [k (sort (keys v))]
+              [k v])))
+     (into {})))
+  ([name key]
+   (key (md name))))
