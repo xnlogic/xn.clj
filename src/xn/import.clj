@@ -36,8 +36,8 @@
       (when (re-find pattern url)
         url))))
 
-(defn model-url [model]
+(defn model-url-matcher [model]
   (match-url (re-pattern (str #"^/model/" model #"/\d+/?$"))))
 
-(defn record-url [& parts]
+(defn record-url-matcher [& parts]
   (match-url (re-pattern (str #"^/is/" (s/join "," parts) #"/\d+/?$"))))

@@ -12,7 +12,7 @@
 
 
 (defn subnet [filename]
-  (->> filename i/csv flatten (filter i/page-url?) (some (i/model-url "subnet"))))
+  (->> filename i/csv flatten (filter i/page-url?) (some (i/model-url-matcher "subnet"))))
 
 ; if col 1 is Dead or Unknown, skip
 (def dead?    (comp (partial re-find #"^Unknown|Dead$") s/trim first))
