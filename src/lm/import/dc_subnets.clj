@@ -134,3 +134,17 @@
     dcs
     load-all))
 
+(defn run-test! [filename]
+  (when-not (re-find #"^sample" @*token)
+    (throw (Exception. "Run the test into a sample app")))
+  (let [xnid (:datacenter_xnid dc)
+        xnid (when (not= "" xnid) xnid)]
+
+    (when xnid
+      (let [[dc-id & _] (xn/execute {:method :put :url "model/datacenter"
+                                     :name (str "a test dc " xnid)})
+            zones (apply concat (:pods dc))
+            subnets (drop 1 (take 10 (mapcat :subnets zones)))]))
+    (doseq [subnet subnets]
+      (create-subnet subnet dc-id))
+    (load! filename)))
