@@ -69,6 +69,7 @@
                :body {
                       ; TODO: is vlan the name? It's always just the vlan number.
                       :name vlan
+                      :primary_vlan primary_vlan
                       :description notes
                       :zone zone-id
                       :direction direction
