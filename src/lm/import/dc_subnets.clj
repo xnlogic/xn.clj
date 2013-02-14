@@ -131,12 +131,11 @@
   (let [xnid (:datacenter_xnid dc)
         xnid (when (not= "" xnid) xnid)
         xnid (get xnid-map xnid xnid)
-        subnets (if (prident "xnid" xnid)
-                  (->> (xn/get-vec (prident "subnet info url" (xn/join-url xnid "/rel/subnets/model/subnet/properties/network_address,notes")))
+        subnets (if xnid
+                  (->> (xn/get-vec (xn/join-url xnid "/rel/subnets/model/subnet/properties/network_address,notes"))
                     (map (fn [[id subnet notes]] [subnet {:id id :notes notes}]))
-                    (into {})
-                    (prident "subnet info"))
-                  (prident "no subnets" {}))
+                    (into {}))
+                  {})
         zones (apply concat (:pods dc))
         pods (group-by :pod zones)
         dc-id (if xnid
