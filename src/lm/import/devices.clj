@@ -9,14 +9,26 @@
             [clojure.pprint :as pp]
             [xn.repl :refer [info prident]]))
 
+; This belongs in a general-purpose lib
+(defn non-unique [data]
+  (last (reduce (fn [[seen multi] x]
+                  (if (seen x)
+                    [seen (conj multi x)]
+                    [(conj seen x) multi]))
+                [#{} #{}]
+                data)))
+
 
 ; create-unique -> {keyvalue id}
 (defn create-unique [{:keys [model key-name]} records]
   (->> records
+    ; TODO handle api error responses
     (map (fn [body]
            [(body key-name)
-            ((xn/execute {:method :put :url (str "/model/" (name model) "?unique=" (name key-name))
-                         :body body}) 0)]))
+            (nth (xn/execute {:method :put
+                              :url (str "/model/" (name model) "?unique=" (name key-name))
+                              :body body})
+                 0)]))
     (into {})))
 
 (defn merge-with-rules
@@ -104,7 +116,8 @@
 (defn device-records [records]
   (->> records
     (extract-records
-      {:class class-name-map}
+      {:class class-name-map
+       :ips  (fn [ips] (when ips (map :name ips)))}
       {:cc (fn [a b] (if (vector? a) (conj a b) [a b]))
        :address (fn [a b] (str a " - " b))}
       {:class   :class
@@ -148,8 +161,7 @@
            (if (:model r)
              r
              (assoc r :model (:model_number r)))))
-    (map (fn [r]
-           (update-in r [:ips] ip-records)))))
+    ))
 
 (defn load! []
   (let [records (device-records raw)
@@ -167,36 +179,26 @@
                  (filter :name)
                  (set-one-rels {:manufacturer manufacturers})
                  (create-unique {:model :model :key :name}))
-        locations (->> raw
-                    (extract-records [:site :room])
-                    (filter #(or (:site %) (:room %)))
-                    (map (fn [{:keys [site room]}]
-                           (let [addr (s/join " - " [site room])]
-                             {:name addr :address addr})))
+        locations (->> records
+                    (extract-records {:address :name})
                     (create-unique {:model :location :key :name}))
-        remedy (->> raw
+        remedy (->> records
                  (extract-records [:id])
                  (map #(assoc % :data_source remedy-id))
                  (create-unique {:model :external_record :key :id}))
-        hpsa (->> raw
+        hpsa (->> records
                (extract-records {:hpsa_id :id :hpsa_status :status})
                (filter :id)
                (map #(assoc % :data_source hpsa-id))
                (create-unique {:model :external_record :key :id}))
-        devices (->> raw
-                  (extract-records
-                    [:name
-                     :description
-                     :serial_number
-                     :height
-                     :bottom_ru
-                     :cpu
-                     :memory])
+        ips (->> raw
+              (mapcat (comp ip-records :ips))
+              (create-unique {:model :ip, :key :name}))
+        devices (->> records
                   (set-one-rels {:model models :location locations})
                   (add-many-rels {:external_records (merge remedy hpsa)})
-                  (map (fn [r] ))
-                  (create-unique {:model ()})
-                  )]
+                  (add-many-rels {:ips ips})
+                  (create-unique {:model ()}))]
     true
     ))
 
