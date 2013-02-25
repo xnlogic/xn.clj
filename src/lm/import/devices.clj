@@ -1,12 +1,6 @@
 
 ;  :ips
-;  [{"class"         nil
-;    "id"            :id
-;    "name"          :name
-;    "description"   :description
-;    "ccl1"          nil
-;    "ccl2"          nil
-;    "ccl3"          nil}]}
+;  []}
 ;
 (ns lm.import.devices
   (:require [xn.client :as xn]
@@ -49,7 +43,7 @@
          fields (if (map? fields)
                   (filter (fn [[from to]] to) fields)
                   (into {} (map vector fields fields)))]
-     (->> records
+     (->> (or records [])
        (map (fn [r]
               (->> fields
                 (map (fn [[from to]]
@@ -97,8 +91,18 @@
              ["Hardware" "Network" "Infrastructure"] :server,
              ["Hardware" "Network" "NAM"] :nam_switch_module })
 
-(defn device-records [raw]
-  (->> raw
+(defn ip-records [ips]
+  (->> ips
+    (extract-records {:class         nil
+                      :id            :id
+                      :name          :name
+                      :description   :description
+                      :ccl1          nil
+                      :ccl2          nil
+                      :ccl3          nil})))
+
+(defn device-records [records]
+  (->> records
     (extract-records
       {:class class-name-map}
       {:cc (fn [a b] (if (vector? a) (conj a b) [a b]))
@@ -133,16 +137,19 @@
        :site                       :address
        :room                       :address
        :hpsa_id                    :hpsa_id
-       :hpsa_status                :hpsa_status})
+       :hpsa_status                :hpsa_status
+       :ips                        :ips})
+    (map (fn [r]
+           (if-let [model (cc-map (:cc r))]
+             (assoc r :class model)
+             r)))
+    (filter :class)
     (map (fn [r]
            (if (:model r)
              r
              (assoc r :model (:model_number r)))))
     (map (fn [r]
-           (if-let [model (cc-map (:cc r))]
-             (assoc r :class model)
-             r)))
-    (filter :class)))
+           (update-in r [:ips] ip-records)))))
 
 (defn load! []
   (let [records (device-records raw)
