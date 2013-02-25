@@ -1,21 +1,9 @@
 (ns lm.import.dc-subnets
   (:require [xn.client :as xn]
             [xn.import :as i]
-            [clojure.data.json :as json]
             [clojure.string :as s]
             [clojure.pprint :as pp]
-            [xn.repl :refer [prident]]))
-
-(defn info [name [id valn record :as result]]
-  (if id
-    (println (str "Executed " name ": id " id " (" (s/join ", " valn) ")"))
-    (do
-      (println (str name " did not get an id:"))
-      (pp/pprint result)))
-  result)
-
-(defn dcs [filename]
-  (json/read-str (slurp filename) :key-fn keyword))
+            [xn.repl :refer [info prident]]))
 
 ; file format
 #_[{:datacenter ...
@@ -159,7 +147,7 @@
    (load! filename {}))
   ([filename xnid-map]
    (-> filename
-     dcs
+     i/json-file
      (load-all xnid-map))))
 
 (defn run-test! [filename]

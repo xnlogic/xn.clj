@@ -1,13 +1,21 @@
 (ns xn.import
   (:require [xn.client :as xn]
+            [clojure.data.json :as json]
             [clojure-csv.core :as csv]
             [clojure.string :as s]))
+
+(defn json-file [filename]
+  (json/read-str (slurp filename) :key-fn keyword))
 
 (defn api-url-regex []
   (let [url (s/replace @xn/*url-root #"/v1$" "")]
     (re-pattern (str "^(" url "|http://localhost:\\d+)(/v1)?"))))
 
 (def file-lines (comp s/split-lines slurp))
+
+(defn json-lines [filename]
+  (->> filename file-lines
+    (map #(json/read-str % :key-fn keyword))))
 
 (def parse-csv csv/parse-csv)
 
