@@ -32,14 +32,14 @@
              ["Hardware" "Network" "NAM"]                   :nam_switch_module })
 
 (defn ip-records [ips]
-  (->> ips
-    (extract-records {:class         nil
-                      :id            :id
-                      :name          :name
-                      :description   :description
-                      :ccl1          nil
-                      :ccl2          nil
-                      :ccl3          nil})))
+  (extract-records {:class         nil
+                    :id            :id
+                    :name          :name
+                    :description   :description
+                    :ccl1          nil
+                    :ccl2          nil
+                    :ccl3          nil}
+                   ips))
 
 (defn lower-case [s]
   (when s (s/lower-case s)))
@@ -48,7 +48,7 @@
   (->> records
     (extract-records
       {:class class-name-map
-       :ips  (fn [ips] (when ips (map :name ips)))
+       :ips ip-records
        :manufacturer lower-case
        :product_name lower-case
        :product_name_or_version lower-case
@@ -144,25 +144,48 @@
       (map #(assoc % :data_source hpsa-id))
       (create-unique {:model :external_record :key :name}))))
 
-(defn make-ips [raw]
-  (->> raw
-    (mapcat (comp ip-records :ips))
-    (create-unique {:model :ip, :key :name})))
+(defn make-ips [ips]
+  (create-unique {:model :ip, :key :name} ips))
 
-(defn make-devices [raw]
-  (let [records (device-records raw)
-        models (make-models records)
-        locations (make-locations records)
-        remedy (make-remedy records)
-        hpsa (make-hpsa records)
-        ips (make-ips raw)]
-    (->> records
-      (map #(assoc % :external_records (remove nil? ((juxt :id :hpsa_id) %))))
-      (set-one-rels {:model models :location locations})
-      (add-many-rels {:external_records (merge remedy hpsa)})
-      (add-many-rels {:ips ips})
-      (create-unique {:model #(:class %) :key :name :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number}}))))
+(defn make-ifaces [ip-ids]
+  (->> ip-ids
+    (map-indexed (fn [n ip-id]
+                   (let [[iface-id & _] (xn/execute {:method :put
+                                                     :url "/model/interface"
+                                                     :body {:name (str "eth" n)
+                                                            :ip ip-id}})]
+                     iface-id)))))
+
+(defn add-ifaces [records]
+  (->> records
+    (map (fn [r]
+           (->> r :ips
+             make-ips
+             vals
+             make-ifaces
+             (assoc-in r [:interfaces :add]))))))
+
+(defn make-devices [raw & {:keys [records models locations external ifaces?] :or {ifaces? true}}]
+  (let [records   (or records   (device-records raw))
+        models    (or models    (make-models records))
+        locations (or locations (make-locations records))
+        remedy    (or external  (make-remedy records))
+        hpsa      (or external  (make-hpsa records))]
+    (cond->>  records
+      true    (map #(assoc % :external_records (remove nil? ((juxt :id :hpsa_id) %))))
+      true    (set-one-rels {:model models :location locations})
+      true    (add-many-rels {:external_records (or external (merge remedy hpsa))})
+      ifaces? add-ifaces
+      true    (create-unique {:model #(:class %) :key :name :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number}}))))
 
 (defn load! [filename]
   (let [raw (i/json-lines filename)]
     (make-devices raw)) )
+
+(defn made [part key]
+  (->> (xn/make-request {:url (str "is/" (name part) "/properties/" (name key))
+                         :method :get
+                         :query {:limit :1000000}})
+    (map reverse)
+    (map vec)
+    (into {})))
