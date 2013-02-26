@@ -58,7 +58,11 @@
        :hpsa_status lower-case
        }
       {:cc (fn [a b] (if (vector? a) (conj a b) [a b]))
-       :location (fn [a b] (str a " - " b))
+       :location (fn [a b]
+                   (cond
+                     (s/blank? a) b
+                     (s/blank? b) a
+                     :else (str a " - " b)))
        }
       {:class                      :class
        :ccl1                       :cc
@@ -122,21 +126,23 @@
     (create-unique {:model :location :key :name})))
 
 (defn make-remedy [records]
-  (let [[_ remedy-id] (create-unique {:model :data_source :key :name}
-                                     {:name "Remedy" :direction "in"})]
+  (let [remedy-id ((create-unique {:model :data_source :key :name}
+                                  {:name "Remedy" :direction "in"})
+                     "Remedy")]
     (->> records
-      (extract-records [:id])
+      (extract-records {:id :name})
       (map #(assoc % :data_source remedy-id))
-      (create-unique {:model :external_record :key :id}))))
+      (create-unique {:model :external_record :key :name}))))
 
 (defn make-hpsa [records]
-  (let [[_ hpsa-id] (create-unique {:model :data_source :key :name}
-                                   {:name "HPSA" :direction "in"})]
+  (let [hpsa-id ((create-unique {:model :data_source :key :name}
+                                {:name "HPSA" :direction "in"})
+                   "HPSA")]
     (->> records
-      (extract-records {:hpsa_id     :id
+      (extract-records {:hpsa_id     :name
                         :hpsa_status :status})
       (map #(assoc % :data_source hpsa-id))
-      (create-unique {:model :external_record :key :id}))))
+      (create-unique {:model :external_record :key :name}))))
 
 (defn make-ips [raw]
   (->> raw
