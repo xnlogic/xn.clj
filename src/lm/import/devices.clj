@@ -1,6 +1,7 @@
 (ns lm.import.devices
   (:require [xn.client :as xn]
             [xn.import :as i :refer [extract-records create-unique set-one-rels add-many-rels]]
+            [clojure.string :as s]
             [xn.repl :refer [info prident]]))
 
 
@@ -41,13 +42,25 @@
                       :ccl2          nil
                       :ccl3          nil})))
 
+(defn lower-case [s]
+  (when s (s/lower-case s)))
+
 (defn device-records [records]
   (->> records
     (extract-records
       {:class class-name-map
-       :ips  (fn [ips] (when ips (map :name ips)))}
+       :ips  (fn [ips] (when ips (map :name ips)))
+       :manufacturer lower-case
+       :product_name lower-case
+       :product_name_or_version lower-case
+       :site lower-case
+       :room lower-case
+       :name lower-case
+       :hpsa_status lower-case
+       }
       {:cc (fn [a b] (if (vector? a) (conj a b) [a b]))
-       :location (fn [a b] (str a " - " b))}
+       :location (fn [a b] (str a " - " b))
+       }
       {:class                      :class
        :ccl1                       :cc
        :ccl2                       :cc
