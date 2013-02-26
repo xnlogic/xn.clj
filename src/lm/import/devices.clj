@@ -1,81 +1,9 @@
-
-;  :ips
-;  []}
-;
 (ns lm.import.devices
   (:require [xn.client :as xn]
-            [xn.import :as i]
-            [clojure.string :as s]
-            [clojure.pprint :as pp]
+            [xn.import :as i :refer [extract-records create-unique set-one-rels add-many-rels]]
             [xn.repl :refer [info prident]]))
 
-; This belongs in a general-purpose lib
-(defn non-unique [data]
-  (last (reduce (fn [[seen multi] x]
-                  (if (seen x)
-                    [seen (conj multi x)]
-                    [(conj seen x) multi]))
-                [#{} #{}]
-                data)))
 
-
-; create-unique -> {keyvalue id}
-(defn create-unique [{:keys [model key-name]} records]
-  (->> records
-    ; TODO handle api error responses
-    (map (fn [body]
-           [(body key-name)
-            (nth (xn/execute {:method :put
-                              :url (str "/model/" (name model) "?unique=" (name key-name))
-                              :body body})
-                 0)]))
-    (into {})))
-
-(defn merge-with-rules
-  "Based on clojure.core/merge-with"
-  [rules & maps]
-  (when (some identity maps)
-    (let [merge-entry (fn [m e]
-                        (let [k (key e) v (val e)]
-                          (if (contains? m k)
-                            (assoc m k ((rules k (:default rules last)) (get m k) v))
-                            (assoc m k v))))
-          merge2 (fn [m1 m2]
-                   (reduce merge-entry (or m1 {}) (seq m2)))]
-      (reduce merge2 maps))))
-
-(defn extract-records
-  ([fields records]
-   (extract-records {} {} fields records))
-  ([clean-rules merge-rules fields records]
-   (let [default-rule (fn [v] (cond
-                                (string? v) (let [v (.trim v)] (when-not (= "" v) v))
-                                (and (number? v) (zero? v)) nil
-                                :else v))
-         fields (if (map? fields)
-                  (filter (fn [[from to]] to) fields)
-                  (into {} (map vector fields fields)))]
-     (->> (or records [])
-       (map (fn [r]
-              (->> fields
-                (map (fn [[from to]]
-                       (let [v (r from)
-                             v ((clean-rules from (:default clean-rules default-rule)) v)]
-                         {to v})))
-                (apply merge-with-rules merge-rules))))
-       (filter #(not-every? nil? %))
-       (set)))))
-
-
-
-
-(defn set-one-rels [fields records]
-  (reduce (fn [records [field rels]]
-            (map (fn [r] (update-in r [field] #(rels %))) records))
-          records
-          fields))
-
-(defn add-many-rels [fields records])
 
 (def class-name-map {"Remedy::Server" :server,
                      "Remedy::MainframePrinter" :server,
@@ -203,7 +131,4 @@
                   (add-many-rels {:ips ips})
                   ; TODO handle model fn, ignore keys
                   (create-unique {:model #(:class %) :key :name :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number}}))]
-    true
-    ))
-
-
+    devices))

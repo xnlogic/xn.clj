@@ -1,5 +1,6 @@
 (ns xn.import
   (:require [xn.client :as xn]
+            [xn.tools :refer [merge-with-rules]]
             [clojure.data.json :as json]
             [clojure-csv.core :as csv]
             [clojure.string :as s]))
@@ -49,3 +50,45 @@
 
 (defn record-url-matcher [& parts]
   (match-url (re-pattern (str #"^/is/" (s/join "," parts) #"/\d+/?$"))))
+
+; create-unique -> {keyvalue id}
+(defn create-unique [{:keys [model key-name]} records]
+  (->> records
+    ; TODO handle api error responses
+    (map (fn [body]
+           [(body key-name)
+            (nth (xn/execute {:method :put
+                              :url (str "/model/" (name model) "?unique=" (name key-name))
+                              :body body})
+                 0)]))
+    (into {})))
+
+(defn extract-records
+  ([fields records]
+   (extract-records {} {} fields records))
+  ([clean-rules merge-rules fields records]
+   (let [default-rule (fn [v] (cond
+                                (string? v) (let [v (.trim v)] (when-not (= "" v) v))
+                                (and (number? v) (zero? v)) nil
+                                :else v))
+         fields (if (map? fields)
+                  (filter (fn [[from to]] to) fields)
+                  (into {} (map vector fields fields)))]
+     (->> (or records [])
+       (map (fn [r]
+              (->> fields
+                (map (fn [[from to]]
+                       (let [v (r from)
+                             v ((clean-rules from (:default clean-rules default-rule)) v)]
+                         {to v})))
+                (apply merge-with-rules merge-rules))))
+       (filter #(not-every? nil? %))
+       (set)))))
+
+(defn set-one-rels [fields records]
+  (reduce (fn [records [field rels]]
+            (map (fn [r] (update-in r [field] #(rels %))) records))
+          records
+          fields))
+
+(defn add-many-rels [fields records])
