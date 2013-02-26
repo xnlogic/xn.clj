@@ -5,7 +5,6 @@
             [xn.repl :refer [info prident]]))
 
 
-
 (def class-name-map {"Remedy::Server" :server,
                      "Remedy::MainframePrinter" :server,
                      "Remedy::Appliance" :server,
@@ -103,50 +102,61 @@
              r
              (assoc r :model (:model_number r)))))))
 
-(defn make-sources []
-  (->> [{:name "Remedy" :direction "in"}
-        {:name "HPSA" :direction "in"}]
-    (create-unique {:model :data_source :key :name})))
-
 (defn make-manufacturers [records]
   (->> records
     (extract-records {:manufacturer :name})
-    (filter :name)
     (create-unique {:model :manufacturer :key :name})))
 
-(defn load! []
+(defn make-models [records]
+  (let [manufacturers (make-manufacturers records)]
+    (->> records
+      (extract-records {:model        :name
+                        :model_number :model_number
+                        :manufacturer :manufacturer})
+      (set-one-rels {:manufacturer manufacturers})
+      (create-unique {:model :device_model :key :name}))))
+
+(defn make-locations [records]
+  (->> records
+    (extract-records {:location :name})
+    (create-unique {:model :location :key :name})))
+
+(defn make-remedy [records]
+  (let [[_ remedy-id] (create-unique {:model :data_source :key :name}
+                                     {:name "Remedy" :direction "in"})]
+    (->> records
+      (extract-records [:id])
+      (map #(assoc % :data_source remedy-id))
+      (create-unique {:model :external_record :key :id}))))
+
+(defn make-hpsa [records]
+  (let [[_ hpsa-id] (create-unique {:model :data_source :key :name}
+                                   {:name "HPSA" :direction "in"})]
+    (->> records
+      (extract-records {:hpsa_id     :id
+                        :hpsa_status :status})
+      (map #(assoc % :data_source hpsa-id))
+      (create-unique {:model :external_record :key :id}))))
+
+(defn make-ips [raw]
+  (->> raw
+    (mapcat (comp ip-records :ips))
+    (create-unique {:model :ip, :key :name})))
+
+(defn make-devices [raw]
   (let [records (device-records raw)
-        sources (make-sources)
-        remedy-id (sources "Remedy")
-        hpsa-id (sources "HPSA")
-        manufacturers (make-manufacturers records)
-        models (->> records
-                 (extract-records {:model        :name
-                                   :model_number :model_number
-                                   :manufacturer :manufacturer})
-                 (filter :name)
-                 (set-one-rels {:manufacturer manufacturers})
-                 (create-unique {:model :model :key :name}))
-        locations (->> records
-                    (extract-records {:location :name})
-                    (create-unique {:model :location :key :name}))
-        remedy (->> records
-                 (extract-records [:id])
-                 (map #(assoc % :data_source remedy-id))
-                 (create-unique {:model :external_record :key :id}))
-        hpsa (->> records
-               (extract-records {:hpsa_id     :id
-                                 :hpsa_status :status})
-               (filter :id)
-               (map #(assoc % :data_source hpsa-id))
-               (create-unique {:model :external_record :key :id}))
-        ips (->> raw
-              (mapcat (comp ip-records :ips))
-              (create-unique {:model :ip, :key :name}))
-        devices (->> records
-                  (map #(assoc % :external_records (remove nil? ((juxt :id :hpsa_id) %))))
-                  (set-one-rels {:model models :location locations})
-                  (add-many-rels {:external_records (merge remedy hpsa)})
-                  (add-many-rels {:ips ips})
-                  (create-unique {:model #(:class %) :key :name :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number}}))]
-    devices))
+        models (make-models records)
+        locations (make-locations records)
+        remedy (make-remedy records)
+        hpsa (make-hpsa records)
+        ips (make-ips raw)]
+    (->> records
+      (map #(assoc % :external_records (remove nil? ((juxt :id :hpsa_id) %))))
+      (set-one-rels {:model models :location locations})
+      (add-many-rels {:external_records (merge remedy hpsa)})
+      (add-many-rels {:ips ips})
+      (create-unique {:model #(:class %) :key :name :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number}}))))
+
+(defn load! [filename]
+  (let [raw (i/json-lines filename)]
+    (make-devices raw)) )

@@ -55,14 +55,15 @@
 
 ; create-unique -> {keyvalue id}
 (defn create-unique [{:keys [model key ignore]} records]
-  (->> (prident "records" records)
+  (->> (if (map? records) [records] records)
     ; TODO handle api error responses
+    (filter key)
     (map (fn [body]
            [(body key)
             (nth (xn/execute {:method :put
                               :url (str "/model/"
                                         (name (if (fn? model)
-                                                ((prident "model" model) body)
+                                                (model body)
                                                 model)))
                               :query {:unique (name key)}
                               :body (apply dissoc body ignore)})
