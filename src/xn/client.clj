@@ -1,5 +1,6 @@
 (ns xn.client
   (:require [clojure.data.json :as json]
+            [clojure.string :as s]
             [clj-http.client :as client]))
 
 (def *url-root (atom "http://localhost:8080/v1"))
@@ -22,11 +23,12 @@
          command
          (when-let [body (:body command)]
            {:body (json/write-str body)})
-         {:url (if-let [url (:url command)]
-                 (cond
-                   (re-find #"^http" url) (throw ())
-                   url
-                   (join-url @*url-root (:url command) ".edn")))}))
+         {:url (when-let [url (:url command)]
+                 (when (re-find #"^http" url) (throw ()))
+                 (str
+                   (join-url @*url-root (:url command) ".edn")
+                   (when (:query command)
+                     (str "?" (s/join "&" (map #(s/join "=" (map name %)) (:query command)))))))}))
 
 (defn make-request [command]
   (binding [*read-eval* false]

@@ -3,7 +3,8 @@
             [xn.tools :refer [merge-with-rules]]
             [clojure.data.json :as json]
             [clojure-csv.core :as csv]
-            [clojure.string :as s]))
+            [clojure.string :as s]
+            [xn.repl :refer [prident]]))
 
 (defn json-file [filename]
   (json/read-str (slurp filename) :key-fn keyword))
@@ -51,15 +52,20 @@
 (defn record-url-matcher [& parts]
   (match-url (re-pattern (str #"^/is/" (s/join "," parts) #"/\d+/?$"))))
 
+
 ; create-unique -> {keyvalue id}
-(defn create-unique [{:keys [model key-name]} records]
-  (->> records
+(defn create-unique [{:keys [model key ignore]} records]
+  (->> (prident "records" records)
     ; TODO handle api error responses
     (map (fn [body]
-           [(body key-name)
+           [(body key)
             (nth (xn/execute {:method :put
-                              :url (str "/model/" (name model) "?unique=" (name key-name))
-                              :body body})
+                              :url (str "/model/"
+                                        (name (if (fn? model)
+                                                ((prident "model" model) body)
+                                                model)))
+                              :query {:unique (name key)}
+                              :body (apply dissoc body ignore)})
                  0)]))
     (into {})))
 
@@ -91,4 +97,12 @@
           records
           fields))
 
-(defn add-many-rels [fields records])
+(defn add-many-rels [fields records]
+  (reduce (fn [records [field rels]]
+            (map (fn [r] (update-in
+                           r [field]
+                           (fn [values]
+                             {:add (map rels values)})))
+                 records))
+          records
+          fields))

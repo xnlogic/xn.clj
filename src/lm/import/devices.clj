@@ -90,17 +90,23 @@
              r
              (assoc r :model (:model_number r)))))))
 
+(defn make-sources []
+  (->> [{:name "Remedy" :direction "in"}
+        {:name "HPSA" :direction "in"}]
+    (create-unique {:model :data_source :key :name})))
+
+(defn make-manufacturers [records]
+  (->> records
+    (extract-records {:manufacturer :name})
+    (filter :name)
+    (create-unique {:model :manufacturer :key :name})))
+
 (defn load! []
   (let [records (device-records raw)
-        sources (->> [{:name "Remedy" :direction "in"}
-                      {:name "HPSA" :direction "in"}]
-                  (create-unique {:model :data_source :key :name}))
+        sources (make-sources)
         remedy-id (sources "Remedy")
         hpsa-id (sources "HPSA")
-        manufacturers (->> records
-                        (extract-records {:manufacturer :name})
-                        (filter :name)
-                        (create-unique {:model :manufacturer :key :name}))
+        manufacturers (make-manufacturers records)
         models (->> records
                  (extract-records {:model        :name
                                    :model_number :model_number
@@ -129,6 +135,5 @@
                   (set-one-rels {:model models :location locations})
                   (add-many-rels {:external_records (merge remedy hpsa)})
                   (add-many-rels {:ips ips})
-                  ; TODO handle model fn, ignore keys
                   (create-unique {:model #(:class %) :key :name :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number}}))]
     devices))
