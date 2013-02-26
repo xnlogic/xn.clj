@@ -5,31 +5,31 @@
             [xn.repl :refer [info prident]]))
 
 
-(def class-name-map {"Remedy::Server" :server,
+(def class-name-map {"Remedy::Server"           :server,
                      "Remedy::MainframePrinter" :server,
-                     "Remedy::Appliance" :server,
-                     "Remedy::VirtualServer" :vm,
-                     "Remedy::BladeChassis" :blade_chassis,
-                     "Remedy::StorageDevice" :storage_device,
-                     "Remedy::Mainframe" :server,
+                     "Remedy::Appliance"        :server,
+                     "Remedy::VirtualServer"    :vm,
+                     "Remedy::BladeChassis"     :blade_chassis,
+                     "Remedy::StorageDevice"    :storage_device,
+                     "Remedy::Mainframe"        :server,
                      "Remedy::SdeVirtualServer" :vm})
 
-(def cc-map {["Hardware" "Network" "Front End Processor"] :server,
-             ["Hardware" "Network" "Router"] :router,
-             ["Hardware" "Network" "Switch"] :switch,
-             ["Hardware" "Network" "Firewall"] :firewall,
-             ["Hardware" "Network" "Load Balancer"] :load_balancer,
+(def cc-map {["Hardware" "Network" "Front End Processor"]   :server,
+             ["Hardware" "Network" "Router"]                :router,
+             ["Hardware" "Network" "Switch"]                :switch,
+             ["Hardware" "Network" "Firewall"]              :firewall,
+             ["Hardware" "Network" "Load Balancer"]         :load_balancer,
              ["Hardware" "Network" "Virtual Load Balancer"] :virtual_load_balancer,
-             ["Hardware" "Network" "Virtual Firewall"] :firewall_context,
-             ["Hardware" "Network" "Access Gateway"] :firewall,
-             ["Hardware" "Network" "Controller"] :firewall,
-             ["Hardware" "Network" "sWITCH"] :switch,
-             ["Hardware" "Network" "Switch Line Card"] :line_card,
-             ["Hardware" "Network" "Console"] :remote_console,
-             ["Hardware" "Network" "IDS/IPS"] :server,
-             ["Hardware" "Network" "Virtual Switch"] :virtual_switch,
-             ["Hardware" "Network" "Infrastructure"] :server,
-             ["Hardware" "Network" "NAM"] :nam_switch_module })
+             ["Hardware" "Network" "Virtual Firewall"]      :firewall_context,
+             ["Hardware" "Network" "Access Gateway"]        :firewall,
+             ["Hardware" "Network" "Controller"]            :firewall,
+             ["Hardware" "Network" "sWITCH"]                :switch,
+             ["Hardware" "Network" "Switch Line Card"]      :line_card,
+             ["Hardware" "Network" "Console"]               :remote_console,
+             ["Hardware" "Network" "IDS/IPS"]               :server,
+             ["Hardware" "Network" "Virtual Switch"]        :virtual_switch,
+             ["Hardware" "Network" "Infrastructure"]        :server,
+             ["Hardware" "Network" "NAM"]                   :nam_switch_module })
 
 (defn ip-records [ips]
   (->> ips
