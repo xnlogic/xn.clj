@@ -119,8 +119,8 @@
       {:class class-name-map
        :ips  (fn [ips] (when ips (map :name ips)))}
       {:cc (fn [a b] (if (vector? a) (conj a b) [a b]))
-       :address (fn [a b] (str a " - " b))}
-      {:class   :class
+       :location (fn [a b] (str a " - " b))}
+      {:class                      :class
        :ccl1                       :cc
        :ccl2                       :cc
        :ccl3                       :cc
@@ -147,8 +147,8 @@
        :id                         :id
        :product_name               :model
        :product_model_or_version   :model_number
-       :site                       :address
-       :room                       :address
+       :site                       :location
+       :room                       :location
        :hpsa_id                    :hpsa_id
        :hpsa_status                :hpsa_status
        :ips                        :ips})
@@ -160,8 +160,7 @@
     (map (fn [r]
            (if (:model r)
              r
-             (assoc r :model (:model_number r)))))
-    ))
+             (assoc r :model (:model_number r)))))))
 
 (defn load! []
   (let [records (device-records raw)
@@ -175,19 +174,22 @@
                         (filter :name)
                         (create-unique {:model :manufacturer :key :name}))
         models (->> records
-                 (extract-records {:model :name :model_number :model_number :manufacturer :manufacturer})
+                 (extract-records {:model        :name
+                                   :model_number :model_number
+                                   :manufacturer :manufacturer})
                  (filter :name)
                  (set-one-rels {:manufacturer manufacturers})
                  (create-unique {:model :model :key :name}))
         locations (->> records
-                    (extract-records {:address :name})
+                    (extract-records {:location :name})
                     (create-unique {:model :location :key :name}))
         remedy (->> records
                  (extract-records [:id])
                  (map #(assoc % :data_source remedy-id))
                  (create-unique {:model :external_record :key :id}))
         hpsa (->> records
-               (extract-records {:hpsa_id :id :hpsa_status :status})
+               (extract-records {:hpsa_id     :id
+                                 :hpsa_status :status})
                (filter :id)
                (map #(assoc % :data_source hpsa-id))
                (create-unique {:model :external_record :key :id}))
@@ -195,10 +197,12 @@
               (mapcat (comp ip-records :ips))
               (create-unique {:model :ip, :key :name}))
         devices (->> records
+                  (map #(assoc % :external_records (remove nil? ((juxt :id :hpsa_id) %))))
                   (set-one-rels {:model models :location locations})
                   (add-many-rels {:external_records (merge remedy hpsa)})
                   (add-many-rels {:ips ips})
-                  (create-unique {:model ()}))]
+                  ; TODO handle model fn, ignore keys
+                  (create-unique {:model #(:class %) :key :name :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number}}))]
     true
     ))
 
