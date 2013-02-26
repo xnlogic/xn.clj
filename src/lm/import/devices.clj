@@ -31,6 +31,8 @@
              ["Hardware" "Network" "Infrastructure"]        :server,
              ["Hardware" "Network" "NAM"]                   :nam_switch_module })
 
+(def model-cleanup {})
+
 (defn ip-records [ips]
   (extract-records {:class         nil
                     :id            :id
@@ -96,15 +98,24 @@
        :hpsa_id                    :hpsa_id
        :hpsa_status                :hpsa_status
        :ips                        :ips})
+    ; Apply model mapped from cc
     (map (fn [r]
            (if-let [model (cc-map (:cc r))]
              (assoc r :class model)
              r)))
-    (filter :class)
+    ; Set model name from model number if it's blank
     (map (fn [r]
            (if (:model r)
              r
-             (assoc r :model (:model_number r)))))))
+             (assoc r :model (:model_number r)))))
+    ; Apply model and data cleanup for manufacturer and model
+    (map (fn [r]
+           (if-let [[manufacturer model class] (model-cleanup ((juxt :manufacturer :model) r))]
+             (merge r {:class class
+                       :manufacturer manufacturer
+                       :model model})
+             r)))
+    (filter :class)))
 
 (defn make-manufacturers [records]
   (->> records
