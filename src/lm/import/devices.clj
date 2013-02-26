@@ -176,7 +176,8 @@
       true    (set-one-rels {:model models :location locations})
       true    (add-many-rels {:external_records (or external (merge remedy hpsa))})
       ifaces? add-ifaces
-      true    (create-unique {:model #(:class %) :key :name :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number}}))))
+      true    (create-unique {:model #(:class %) :key :name
+                              :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number :ips}}))))
 
 (defn load! [filename]
   (let [raw (i/json-lines filename)]
