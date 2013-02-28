@@ -2,7 +2,8 @@
   (:require [xn.client :as xn]
             [xn.import :as i :refer [extract-records create-unique set-one-rels add-many-rels]]
             [clojure.string :as s]
-            [xn.repl :refer [info prident]]))
+            [xn.repl :refer [info prident]]
+            [xn.tools :refer [vectorize]]))
 
 
 (def class-name-map {"Remedy::Server"           :server,
@@ -202,7 +203,7 @@
        :name lower-case
        :hpsa_status lower-case
        }
-      {:cc (fn [a b] (if (vector? a) (conj a b) [a b]))
+      {:cc vectorize
        :location (fn [a b]
                    (cond
                      (s/blank? a) b

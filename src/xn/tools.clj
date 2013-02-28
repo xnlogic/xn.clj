@@ -21,3 +21,8 @@
           merge2 (fn [m1 m2]
                    (reduce merge-entry (or m1 {}) (seq m2)))]
       (reduce merge2 maps))))
+
+(defn vectorize
+  "Useful for merge-with or merge-with-rules to build a vector of conflicts"
+  [a b]
+  (if (vector? a) (conj a b) [a b]))
