@@ -87,3 +87,34 @@
      (into {})))
   ([name key]
    (key (md name))))
+
+(defn ->path-properties
+  ([url-parts]
+   (let [[path properties]
+         (reduce (fn [[path properties] [segment props]]
+                   (if segment
+                     [(join-url path segment)
+                      (conj properties
+                            (cond (map? props) [(s/join "," (map name (keys props)))
+                                                (vec (map (comp keyword name) (vals props)))]
+                                  (sequential? props) [(s/join "," (map name props))
+                                                       (vec (map (comp keyword name) props))]
+                                  props [(name props) [(keyword (name props))]]
+                                  :else ["" []]))]
+                     [path properties]))
+                 [nil []]
+                 (partition 2 url-parts))]
+     {:method :get
+      :url (s/join "/" (apply vector path "path_properties" (map first properties)))
+      :keys (apply concat (map second properties))}))
+  ([url-parts opts]
+   (merge (->path-properties url-parts) opts)))
+
+(defn get-path-maps [url-parts opts]
+  (let [command (->path-properties url-parts opts)]
+    (let [keys (:keys command)]
+      (map #(zipmap keys (apply concat %)) (make-request command)))))
+
+(defn get-path-properties [url-parts opts]
+  (map #(vec (apply concat %)) (make-request (->path-properties url-parts opts))))
+

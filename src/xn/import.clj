@@ -113,3 +113,36 @@
                  records))
           records
           fields))
+
+(defn key->id [part key]
+  (->> (xn/make-request {:url (str "is/" (name part) "/properties/" (name key))
+                         :method :get
+                         :query {:limit :1000000}})
+    (map reverse)
+    (map vec)
+    (into {})))
+
+(defn external-ids-map [source-name & parts]
+  (into {}
+        (xn/get-path-properties
+          ["is/data_source" nil
+           "filter/name" nil
+           "rel/external_records" :record_id
+           "rel/record" :xnid
+           (when-not (empty? parts) (str "is/" (s/join "," (map name parts)))) nil]
+          {:query {:name source-name :limit :1000000}})))
+
+(defn external-ids->xnids [source-name parts ids]
+  (if (empty? ids)
+    []
+    (into {}
+          (xn/get-path-properties
+            ["is/data_source" nil
+             "filter/name~1" nil
+             "rel/external_records" :record_id
+             "filter/name~2" nil
+             "rel/record" :xnid
+             (when-not (empty? parts) (str "is/" (s/join "," (map name parts)))) nil]
+            {:query {:limit :1000000
+                     "name~1" source-name
+                     "name~2[value]" (s/join "," ids)}}))))
