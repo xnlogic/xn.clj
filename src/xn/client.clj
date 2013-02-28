@@ -96,9 +96,9 @@
                      [(join-url path segment)
                       (conj properties
                             (cond (map? props) [(s/join "," (map name (keys props)))
-                                                (vec (map (comp keyword name) (vals props)))]
+                                                (mapv (comp keyword name) (vals props))]
                                   (sequential? props) [(s/join "," (map name props))
-                                                       (vec (map (comp keyword name) props))]
+                                                       (mapv (comp keyword name) props)]
                                   props [(name props) [(keyword (name props))]]
                                   :else ["" []]))]
                      [path properties]))
@@ -117,4 +117,15 @@
 
 (defn get-path-properties [url-parts opts]
   (map #(vec (apply concat %)) (make-request (->path-properties url-parts opts))))
+
+(defn account []
+  (get-one "/account"))
+
+(defn show-account []
+  (let [a (account)]
+    (println (str "loading data for client: " (a "client_name")))
+    (println (str "          using account: " (:email a)))))
+
+; show the current client on boot
+(show-account)
 

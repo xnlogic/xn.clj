@@ -2,7 +2,6 @@
   (:require [xn.client :as xn]
             [xn.import :as i :refer [extract-records create-unique set-one-rels add-many-rels]]
             [clojure.string :as s]
-            [xn.repl :refer [info prident]]
             [xn.tools :refer [vectorize]]))
 
 
@@ -334,11 +333,3 @@
 (defn load! [filename]
   (let [raw (i/json-lines filename)]
     (make-devices raw)) )
-
-(defn made [part key]
-  (->> (xn/make-request {:url (str "is/" (name part) "/properties/" (name key))
-                         :method :get
-                         :query {:limit :1000000}})
-    (map reverse)
-    (map vec)
-    (into {})))
