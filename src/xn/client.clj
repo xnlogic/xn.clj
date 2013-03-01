@@ -127,5 +127,6 @@
     (println (str "          using account: " (:email a)))))
 
 ; show the current client on boot
-(show-account)
+(try (show-account)
+  (catch Exception e (.getMessage e)))
 
