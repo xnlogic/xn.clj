@@ -48,5 +48,3 @@
      :rfcs :rfcs}
     records))
 
-
-
