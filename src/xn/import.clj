@@ -104,6 +104,24 @@
           records
           fields))
 
+(defn set-by-externals [data-source f]
+  (fn [records]
+    {:set (map #(str data-source "/" (f %)) records)}))
+
+(defn add-by-externals [data-source f]
+  (fn [records]
+    {:add (map #(str data-source "/" (f %)) records)}))
+
+(defn add-external [data-source]
+  (fn [id]
+    ; The problem here is that it keys on the data source and the id but
+    ; I can't really express that using :UNIQUE which only operates on
+    ; indexed properties right now...
+    {:add {:model_name :external_record
+           :UNIQUE [:name :display_name]
+           :display_name (str data-source "/" id)
+           :record_id (str data-source "/" id)}}))
+
 (defn add-many-rels [fields records]
   (reduce (fn [records [field rels]]
             (map (fn [r] (update-in

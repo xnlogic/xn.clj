@@ -1,3 +1,5 @@
+; remedy_incidents, rfcs, problems and releases (in that order) and then the remedy_devices_to_itsm file to stitch it all together...
+
 (ns lm.import.device_itsm
   (:require [xn.client :as xn]
             [xn.import :as i :refer [extract-records create-unique set-one-rels add-many-rels]]
@@ -10,7 +12,7 @@
      :impact :impact
      :class nil
      :submitter :submitter
-     :support_group :project
+     :support_group :support_group
      :organization :customer
      :short_description :description
      :urgency :urgency

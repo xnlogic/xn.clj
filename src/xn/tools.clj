@@ -1,6 +1,5 @@
 (ns xn.tools)
 
-; This belongs in a more general-purpose lib
 (defn non-unique [data]
   (last (reduce (fn [[seen multi] x]
                   (if (seen x)
@@ -26,3 +25,8 @@
   "Useful for merge-with or merge-with-rules to build a vector of conflicts"
   [a b]
   (if (vector? a) (conj a b) [a b]))
+
+(defn make-set
+  "Useful for merge-with or merge-with-rules to build a set of conflicts"
+  [a b]
+  (if (set? a) (conj a b) (conj #{a} b)))
