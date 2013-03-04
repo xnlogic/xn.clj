@@ -54,20 +54,26 @@
 
 
 ; create-unique -> {keyvalue id}
-(defn create-unique [{:keys [model key ignore]} records]
+(defn create-unique [{:keys [model key ignore errors]} records]
   (->> (if (map? records) [records] records)
-    ; TODO handle api error responses
     (filter key)
     (map (fn [body]
            [(body key)
-            (nth (xn/execute {:method :put
-                              :url (str "/model/"
-                                        (name (if (fn? model)
-                                                (model body)
-                                                model)))
-                              :query {:unique (name key)}
-                              :body (apply dissoc body ignore)})
-                 0)]))
+            (let [result (xn/execute {:method :put
+                                      :url (str "/model/"
+                                                (name (if (fn? model)
+                                                        (model body)
+                                                        model)))
+                                      :query {:unique (name key)}
+                                      :body (apply dissoc body ignore)
+                                      :throw-exceptions false
+                                      })]
+              (if (vector? result)
+                (first result)
+                (do
+                  (clojure.pprint/pprint result)
+                  (when errors (swap! errors assoc (body key) result))
+                  nil)))]))
     (into {})))
 
 (defn extract-records
