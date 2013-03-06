@@ -1,6 +1,6 @@
 (ns xn.import
   (:require [xn.client :as xn]
-            [xn.tools :refer [merge-with-rules]]
+            [xn.tools :refer [merge-with-rules key-mapper]]
             [clojure.data.json :as json]
             [clojure-csv.core :as csv]
             [clojure.string :as s]
@@ -80,7 +80,8 @@
          (fn [value] {:CREATE model-name, field value})
          fns))
 
-(defn extract [& {:keys [clean merge-rules fields template mappings filters]}]
+(defn extract [& {:keys [clean merge-rules fields template mappings filters post-merge]
+                  :or {clean {} merge-rules {} template {} mappings [] filters [] post-merge {}}}]
    (let [default-rule (fn [v] (cond
                                 (string? v) (let [v (.trim v)] (when-not (= "" v) v))
                                 (and (number? v) (zero? v)) nil
@@ -92,21 +93,18 @@
        (->> (cond (sequential? records) records
                   records [records]
                   :else [])
+            (map (key-mapper clean default-rule))
             (map (fn [r]
                    (->> fields
-                        (map (fn [[from to]]
-                               (let [v (r from)
-                                     v ((clean from (:default clean default-rule)) v)]
-                                 {to v})))
+                        (map (fn [[from to]] {to (r from)}))
                         (apply merge-with-rules merge-rules))))
             (map (fn [r] (merge template r)))
             (filter #(not-every? nil? %))
             set
-            (fn [extracted] (if mappings
-                              (reduce (fn [data f] (map f data)) extracted mappings)
-                              extracted))
-            (fn [extracted] (if filters
-                              (reduce (fn [data f] (filter f data)) extracted filters)))))))
+            (fn [extracted] (reduce (fn [data f] (map f data)) extracted mappings))
+            (map (key-mapper post-merge identity))
+            set
+            (fn [extracted] (reduce (fn [data f] (filter f data)) extracted filters))))))
 
 (defn extract-records
   ([fields records]

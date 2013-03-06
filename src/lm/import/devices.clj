@@ -232,9 +232,7 @@
                                                       :name manufacturer}} model})
                        (dissoc :model_number :manufacturer))
                    device))]
-    :post-merge {:location (extract-rel-unique :add :location :name)
-                 :model}
-
+    :post-merge {:location (extract-rel-unique :add :location :name) }
     :filters [:class]
     :fields {:class                      :class
              :ccl1                       :cc

@@ -1,4 +1,5 @@
-(ns xn.tools)
+(ns xn.tools
+  (:require [clojure.string :as s]))
 
 (defn non-unique [data]
   (last (reduce (fn [[seen multi] x]
@@ -40,9 +41,19 @@
                    .listFiles
                    (map #(.getPath %)))]
      (if ext
-       (filter #(re-find (re-pattern (str "\." ext "$")) %) list)
+       (filter #(re-find (re-pattern (str "\\." ext "$")) %) list)
        list))))
 
 (defn lower-case [s]
   (when s (s/lower-case s)))
+
+(defn key-mapper
+  ([fn-map]
+   (key-mapper fn-map identity))
+  ([fn-map default]
+   (map (fn [r]
+          (into {}
+                (map (fn [[key value]]
+                       [key (fn-map key (:default fn-map default))])
+                     r))))))
 
