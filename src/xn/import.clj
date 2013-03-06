@@ -24,16 +24,6 @@
 (defn csv [filename]
   (-> filename slurp csv/parse-csv))
 
-(defn has [f] (partial some f))
-
-(defn files [dir]
-  (->> dir clojure.java.io/file
-    .listFiles
-    (map #(.getPath %))))
-
-(defn csv-files [dir]
-  (filter #(re-find #"\.csv$" %) (files dir)))
-
 (defn page-url? [s]
   (re-find (api-url-regex) s))
 
@@ -76,10 +66,21 @@
                   nil)))]))
     (into {})))
 
-(defn extract-records
-  ([fields records]
-   (extract-records {} {} fields records))
-  ([clean-rules merge-rules fields records]
+(defn map-to-rels [add-or-set fns]
+  (fn [records]
+    {add-or-set (map (apply juxt fns) records)}))
+
+(defn extract-rel-unique [add-or-set model-name field & fns]
+  (map-to-rels add-or-set
+         (fn [value] {:CREATE model-name, :UNIQUE field, field value})
+         fns))
+
+(defn extract-rel-non-unique [add-or-set model-name field & fns]
+  (map-to-rels add-or-set
+         (fn [value] {:CREATE model-name, field value})
+         fns))
+
+(defn extract [& {:keys [clean merge-rules fields template mappings filters]}]
    (let [default-rule (fn [v] (cond
                                 (string? v) (let [v (.trim v)] (when-not (= "" v) v))
                                 (and (number? v) (zero? v)) nil
@@ -87,40 +88,60 @@
          fields (if (map? fields)
                   (filter (fn [[from to]] to) fields)
                   (into {} (map vector fields fields)))]
-     (->> (or records [])
-       (map (fn [r]
-              (->> fields
-                (map (fn [[from to]]
-                       (let [v (r from)
-                             v ((clean-rules from (:default clean-rules default-rule)) v)]
-                         {to v})))
-                (apply merge-with-rules merge-rules))))
-       (filter #(not-every? nil? %))
-       (set)))))
+     (fn [records]
+       (->> (cond (sequential? records) records
+                  records [records]
+                  :else [])
+            (map (fn [r]
+                   (->> fields
+                        (map (fn [[from to]]
+                               (let [v (r from)
+                                     v ((clean from (:default clean default-rule)) v)]
+                                 {to v})))
+                        (apply merge-with-rules merge-rules))))
+            (map (fn [r] (merge template r)))
+            (filter #(not-every? nil? %))
+            set
+            (fn [extracted] (if mappings
+                              (reduce (fn [data f] (map f data)) extracted mappings)
+                              extracted))
+            (fn [extracted] (if filters
+                              (reduce (fn [data f] (filter f data)) extracted filters)))))))
+
+(defn extract-records
+  ([fields records]
+   ((extract :fields fields) records))
+  ([clean-rules merge-rules fields records]
+   ((extract :clean clean-rules :merge merge-rules :fields fields) records)))
+
+(defn extract-rel-records [add-or-set model-name uniques & extract-rules]
+  (fn [records]
+    {add-or-set (->> (if (sequential? records) records [records])
+                     ((apply extract extract-rules))
+                     (map #(merge {:CREATE model-name :UNIQUE uniques} %)))})) ; set model-name and unique
+
+(defn external [data-source]
+  (fn [id]
+    {:CREATE :external_record :UNIQUE :name
+     :name (str data-source "/" id)}))
+
+(defn set-by-externals [data-source & fns]
+  (map-to-rels :set (external data-source) fns))
+
+(defn add-by-externals [data-source & fns]
+  (map-to-rels :add (external data-source) fns))
+
+
+
+
+; -------------------------------------------------------------------------
+; hopefully these methods can be removed
 
 (defn set-one-rels [fields records]
   (reduce (fn [records [field rels]]
             (map (fn [r] (update-in r [field] #(rels %))) records))
           records
           fields))
-
-(defn set-by-externals [data-source f]
-  (fn [records]
-    {:set (map #(str data-source "/" (f %)) records)}))
-
-(defn add-by-externals [data-source f]
-  (fn [records]
-    {:add (map #(str data-source "/" (f %)) records)}))
-
-(defn add-external [data-source]
-  (fn [id]
-    ; The problem here is that it keys on the data source and the id but
-    ; I can't really express that using :UNIQUE which only operates on
-    ; indexed properties right now...
-    {:add {:model_name :external_record
-           :UNIQUE [:name :display_name]
-           :display_name (str data-source "/" id)
-           :record_id (str data-source "/" id)}}))
 
 (defn add-many-rels [fields records]
   (reduce (fn [records [field rels]]

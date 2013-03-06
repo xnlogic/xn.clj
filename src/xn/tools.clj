@@ -30,3 +30,19 @@
   "Useful for merge-with or merge-with-rules to build a set of conflicts"
   [a b]
   (if (set? a) (conj a b) (conj #{a} b)))
+
+(defn has [f] (partial some f))
+
+(defn files
+  ([dir] (files dir nil))
+  ([dir ext]
+   (let [list (->> dir clojure.java.io/file
+                   .listFiles
+                   (map #(.getPath %)))]
+     (if ext
+       (filter #(re-find (re-pattern (str "\." ext "$")) %) list)
+       list))))
+
+(defn lower-case [s]
+  (when s (s/lower-case s)))
+

@@ -175,90 +175,100 @@
   ["raritan" "raritan dominion serial switch"                                ] [ "Raritan" "Dominion serial switch" :remote_console]
   ["raritan" "raritan dominion sx16 switch"                                  ] [ "Raritan" "Dominion sx16 switch" :remote_console]})
 
-(defn ip-records [ips]
-  (extract-records {:class         nil
+(def ip-records
+  (extract :template {:CREATE :ip :UNIQUE :name}
+           :fields {:class         :model_name
                     :id            :id
                     :name          :name
                     :description   :description
                     :ccl1          nil
                     :ccl2          nil
-                    :ccl3          nil}
-                   ips))
+                    :ccl3          nil}))
 
-(defn lower-case [s]
-  (when s (s/lower-case s)))
+(defn interfaces-with-ips [ips]
+  (->> ips
+       ip-records
+       (fn [records]
+         {:add (map-indexed (fn [n record]
+                              {:name (str "eth" n)
+                               :ip record})
+                            records)})))
 
-(defn device-records [records]
-  (->> records
-    (extract-records
-      {:class class-name-map
-       :ips ip-records
-       :manufacturer lower-case
-       :product_name lower-case
-       ; can't downcase this because it was used as-is to generate the key for model-cleanup
-       ;:product_model_or_version lower-case
-       :site lower-case
-       :room lower-case
-       :name lower-case
-       :hpsa_status lower-case
-       }
-      {:cc vectorize
-       :location (fn [a b]
-                   (cond
-                     (s/blank? a) b
-                     (s/blank? b) a
-                     :else (str a " - " b)))
-       }
-      {:class                      :class
-       :ccl1                       :cc
-       :ccl2                       :cc
-       :ccl3                       :cc
-       :manufacturer               :manufacturer
-       :asset_tag_num              nil,
-       :release_order_number       nil
-       :sid                        nil,
-       :role_description           nil
-       :role                       nil
-       :number_of_fiber            nil
-       :number_of_ethernet         nil
-       :name                       :name,
-       :description                :description
-       :serial_num                 :serial_number,
-       :number_of_ru               :height
-       :bottom_ru                  :bottom_ru
-       :number_of_cpus             :cpu
-       :max_memory                 :memory,
-       :local_storage              nil
-       :legacy_vendor              nil,
-       :legacy_sla                 nil,
-       :ibm_type                   nil,
-       :previous_builders          nil,
-       :id                         :id
-       :product_name               :model
-       :product_model_or_version   :model_number
-       :site                       :location
-       :room                       :location
-       :hpsa_id                    :hpsa_id
-       :hpsa_status                :hpsa_status
-       :ips                        :ips})
-    ; Apply model mapped from cc
-    (map (fn [r]
-           (if-let [model (cc-map (:cc r))]
-             (assoc r :class model)
-             r)))
-    ; Set model name from model number if it's blank
-    (map (fn [r]
-           (if (:model r)
-             r
-             (assoc r :model (:model_number r)))))
-    ; Apply model and data cleanup for manufacturer and model
-    (map (fn [r]
-           (if-let [[manufacturer model class] (model-cleanup ((juxt :manufacturer :model) r))]
-             (merge r {:class class
-                       :manufacturer manufacturer
-                       :model model})
-             r)))
-    (filter :class)))
+(def device-records
+  (extract
+    :clean {:class class-name-map
+            :ips interfaces-with-ips
+            :manufacturer lower-case
+            :product_name lower-case
+            ; can't downcase this because it was used as-is to generate the key for model-cleanup
+            ;:product_model_or_version lower-case
+            :site lower-case
+            :room lower-case
+            :name lower-case
+            :hpsa_status lower-case
+             }
+    :merge-rules {:cc vectorize
+                  :location (fn [a b]
+                              (cond
+                                (s/blank? a) b
+                                (s/blank? b) a
+                                :else (str a " - " b)))}
+    :mappings [(fn [device] ; Apply model mapped from cc
+                 (if-let [model (cc-map (:cc device))]
+                   (assoc device :class model)
+                   device))
+               (fn [device] ; Set model name from model number if it's blank
+                 (if (:model device)
+                   device
+                   (assoc device :model (:model_number device))))
+               (fn [device] ; Apply model and data cleanup for manufacturer and model
+                 (if-let [[manufacturer model class] (model-cleanup ((juxt :manufacturer :model) device))]
+                   (-> device
+                       (merge {:class class
+                               :model {:CREATE :model :UNIQUE :name
+                                       :name model
+                                       :model_number (:model_number device)
+                                       :manufacturer {:CREATE :manufacturer :UNIQUE :name
+                                                      :name manufacturer}} model})
+                       (dissoc :model_number :manufacturer))
+                   device))]
+    :post-merge {:location (extract-rel-unique :add :location :name)
+                 :model}
+
+    :filters [:class]
+    :fields {:class                      :class
+             :ccl1                       :cc
+             :ccl2                       :cc
+             :ccl3                       :cc
+             :manufacturer               :manufacturer
+             :asset_tag_num              nil,
+             :release_order_number       nil
+             :sid                        nil,
+             :role_description           nil
+             :role                       nil
+             :number_of_fiber            nil
+             :number_of_ethernet         nil
+             :name                       :name,
+             :description                :description
+             :serial_num                 :serial_number,
+             :number_of_ru               :height
+             :bottom_ru                  :bottom_ru
+             :number_of_cpus             :cpu
+             :max_memory                 :memory,
+             :local_storage              nil
+             :legacy_vendor              nil,
+             :legacy_sla                 nil,
+             :ibm_type                   nil,
+             :previous_builders          nil,
+             :id                         :id
+             :product_name               :model
+             :product_model_or_version   :model_number
+             :site                       :location
+             :room                       :location
+             :hpsa_id                    :hpsa_id
+             :hpsa_status                :hpsa_status
+             :ips                        :interfaces}
+    ))
 
 (defn make-manufacturers [records]
   (->> records
@@ -274,10 +284,6 @@
       (set-one-rels {:manufacturer manufacturers})
       (create-unique {:model :device_model :key :name}))))
 
-(defn make-locations [records]
-  (->> records
-    (extract-records {:location :name})
-    (create-unique {:model :location :key :name})))
 
 (defn make-remedy [records]
   (let [remedy-id ((create-unique {:model :data_source :key :name}
@@ -298,35 +304,15 @@
       (map #(assoc % :data_source hpsa-id))
       (create-unique {:model :external_record :key :record_id}))))
 
-(defn make-ifaces [ip-ids]
-  (->> ip-ids
-    (map-indexed (fn [n ip-id]
-                   (let [[iface-id & _] (xn/execute {:method :put
-                                                     :url "/model/interface"
-                                                     :body {:name (str "eth" n)
-                                                            :ip ip-id}})]
-                     iface-id)))))
-
-(defn add-ifaces [records]
-  (->> records
-    (map (fn [r]
-           (->> r :ips
-             (create-unique {:model :ip, :key :name})
-             vals
-             make-ifaces
-             (assoc-in r [:interfaces :add]))))))
-
-(defn make-devices [raw & {:keys [records models locations external ifaces?] :or {ifaces? true}}]
+(defn make-devices [raw & {:keys [records models locations external]}]
   (let [records   (or records   (device-records raw))
         models    (or models    (make-models records))
-        locations (or locations (make-locations records))
         remedy    (or external  (make-remedy records))
         hpsa      (or external  (make-hpsa records))]
     (cond->>  records
       true    (map #(assoc % :external_records (remove nil? ((juxt :id :hpsa_id) %))))
       true    (set-one-rels {:model models :location locations})
       true    (add-many-rels {:external_records (or external (merge remedy hpsa))})
-      ifaces? add-ifaces
       true    (create-unique {:model #(:class %) :key :name
                               :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number :ips}}))))
 

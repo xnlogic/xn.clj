@@ -20,16 +20,12 @@
 (defn problem-records [records]
   (extract-records
     ; clean
-    {:incidents (set-by-externals "Remedy" :id)
-     :related_cis (set-by-externals "Remedy" :id)
-     :rfcs (set-by-externals "Remedy" :id)
-     :id (add-external "Remedy")
-     :organization (add-rel {:model_name :customer
-                             :UNIQUE :name}
-                            :name)
-     :support_group (add-rel {:model_name :support_group
-                              :UNIQUE :name}
-                             :name)}
+    {:incidents (add-by-externals "Remedy" :id)
+     :related_cis (add-by-externals "Remedy" :id)
+     :rfcs (add-by-externals "Remedy" :id)
+     :id (external "Remedy")
+     :organization (extract-rel-unique :customer :name)
+     :support_group (extract-rel-unique :support_group :name)}
     ; merge
     {}
     ; field mapping
