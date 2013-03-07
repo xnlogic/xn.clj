@@ -197,10 +197,11 @@
 (defn model-record [manufacturer model model-num]
   {:model {:add {:CREATE :device_model
                  :UNIQUE [:name :model_number]
-                 :name model
-                 :model_number model-num
-                 :manufacturer {:set {:CREATE :manufacturer :UNIQUE :name
-                                      :name manufacturer}}}}})
+                 :name (or model model-num)
+                 :model_number (when-not model model-num)
+                 :manufacturer (when manufacturer
+                                 {:set {:CREATE :manufacturer :UNIQUE :name
+                                        :name manufacturer}})}}})
 
 (def device-records
   (extract
@@ -236,7 +237,9 @@
            (if found
              (assoc device :class class)
              device)
-           (model-record manufacturer model (:model_number device)))))]
+           (model-record (or manufacturer (:manufacturer device))
+                         (or model (:model device))
+                         (:model_number device)))))]
     :post-merge {:location (extract-rel-unique :add :location :name) }
     :filters [:class]
     :fields {:class                      :class
