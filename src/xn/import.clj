@@ -42,28 +42,29 @@
 (defn record-url-matcher [& parts]
   (match-url (re-pattern (str #"^/is/" (s/join "," parts) #"/\d+/?$"))))
 
+(defn create-one-unique [{:keys [model key ignore errors] :as opts} body]
+  (when (and (body key) (map? (body key)))
+    [(body key)
+     (let [result (xn/execute {:method :put
+                               :url (str "/model/"
+                                         (name (if (fn? model)
+                                                 (model body)
+                                                 model)))
+                               :query {:unique (name key)}
+                               :body (apply dissoc body ignore)
+                               :throw-exceptions false})]
+       (if (vector? result)
+         (first result)
+         (do
+           (clojure.pprint/pprint result)
+           (when errors (swap! errors assoc (body key) result))
+           nil)))]))
 
 ; create-unique -> {keyvalue id}
-(defn create-unique [{:keys [model key ignore errors]} records]
+(defn create-unique [{:keys [key] :as opts} records]
   (->> records
        vec-wrap
-       (filter key)
-       (map (fn [body]
-              [(body key)
-               (let [result (xn/execute {:method :put
-                                         :url (str "/model/"
-                                                   (name (if (fn? model)
-                                                           (model body)
-                                                           model)))
-                                         :query {:unique (name key)}
-                                         :body (apply dissoc body ignore)
-                                         :throw-exceptions false})]
-                 (if (vector? result)
-                   (first result)
-                   (do
-                     (clojure.pprint/pprint result)
-                     (when errors (swap! errors assoc (body key) result))
-                     nil)))]))
+       (map #(create-one-unique opts %))
        (into {})))
 
 (defn map-to-rels [add-or-set fns]
@@ -81,30 +82,46 @@
                (cons (fn [value] {:CREATE model-name, field value})
                      fns)))
 
-(defn extract [& {:keys [clean merge-rules fields template mappings filters post-merge]
-                  :or {clean {} merge-rules {} template {} mappings [] filters [] post-merge {}}}]
-   (let [default-rule (fn [v] (cond
-                                (string? v) (let [v (.trim v)] (when-not (= "" v) v))
-                                (and (number? v) (zero? v)) nil
-                                :else v))
-         fields (if (map? fields)
-                  (filter (fn [[from to]] to) fields)
-                  (into {} (map vector fields fields)))]
-     (fn extractor [records]
-       (let [records (->> records
-                          vec-wrap
-                          (map (key-mapper clean default-rule))
-                          (map (fn [r]
-                                 (->> fields
-                                      (map (fn [[from to]] {to (r from)}))
-                                      (apply merge-with-rules merge-rules))))
-                          (map (fn [r] (merge template r)))
-                          (filter #(not-every? nil? %))
-                          set)
-             records (reduce (fn [data f] (map f data)) records mappings)
-             records (map (key-mapper post-merge identity) records)
-             records (set records)]
-         (reduce (fn [data f] (filter f data)) records filters)))))
+(defn extract-one [& {:keys [clean merge-rules fields template mappings filters post-merge import]
+                      :or {clean {} merge-rules {} template {} mappings [] filters [] post-merge {}}}]
+  (letfn [(default-rule [v]
+            (cond
+              (string? v)      (let [v (.trim v)] (when-not (= "" v) v))
+              (and (number? v) (zero? v)) nil
+              :else            v))
+          (rename-and-merge [r]
+            (->> fields
+                 (map (fn [[from to]] {to (r from)}))
+                 (apply merge-with-rules merge-rules)))
+          (apply-template [r] (merge template r))
+          (not-blank [r]
+            (when (not-every? nil? r) r))
+          (apply-mappings [r]
+            (reduce (fn [data f] (f data)) record mappings))
+          (apply-filters [r]
+            (when (every? #(% r) filters) r))]
+    (let [clean-fields (key-mapper clean default-rule)
+          finalize-fields (key-mapper post-merge identity)])
+    (fn [record]
+      (some-> record
+              clean-fields
+              rename-and-merge
+              apply-template
+              not-blank
+              apply-mappings
+              finalize-fields
+              apply-filters))))
+
+(defn extract [& {:keys [fields import] :as opts}]
+  (let [default-rule
+        fields (if (map? fields)
+                 (filter (fn [[from to]] to) fields)
+                 (into {} (map vector fields fields)))
+        extractor (apply extract-one-record opts)]
+    (fn [records]
+      (->> records
+           (map extractor)
+           set))))
 
 ; TODO: remove references to extract-records
 (defn extract-records
@@ -137,7 +154,7 @@
 
 ; -------------------------------------------------------------------------
 ; These should not be needed very often. Much clearer to build up a nested
-; object that defines or finds all of the related elements in one requset.
+; object that defines or finds all of the related elements in one request.
 
 (defn set-one-rels
   "Use this when you already know the id of the related record"
