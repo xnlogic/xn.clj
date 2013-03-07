@@ -247,6 +247,8 @@
              :ccl2                       :cc
              :ccl3                       :cc
              :manufacturer               :manufacturer
+             :status                     :lifecycle_status
+             :status_reason              :lifecycle_status_reason
              :asset_tag_num              nil,
              :release_order_number       nil
              :sid                        nil,
