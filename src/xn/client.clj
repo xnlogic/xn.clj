@@ -87,3 +87,46 @@
      (into {})))
   ([name key]
    (key (md name))))
+
+(defn ->path-properties
+  ([url-parts]
+   (let [[path properties]
+         (reduce (fn [[path properties] [segment props]]
+                   (if segment
+                     [(join-url path segment)
+                      (conj properties
+                            (cond (map? props) [(s/join "," (map name (keys props)))
+                                                (mapv (comp keyword name) (vals props))]
+                                  (sequential? props) [(s/join "," (map name props))
+                                                       (mapv (comp keyword name) props)]
+                                  props [(name props) [(keyword (name props))]]
+                                  :else ["" []]))]
+                     [path properties]))
+                 [nil []]
+                 (partition 2 url-parts))]
+     {:method :get
+      :url (s/join "/" (apply vector path "path_properties" (map first properties)))
+      :keys (apply concat (map second properties))}))
+  ([url-parts opts]
+   (merge (->path-properties url-parts) opts)))
+
+(defn get-path-maps [url-parts opts]
+  (let [command (->path-properties url-parts opts)]
+    (let [keys (:keys command)]
+      (map #(zipmap keys (apply concat %)) (make-request command)))))
+
+(defn get-path-properties [url-parts opts]
+  (map #(vec (apply concat %)) (make-request (->path-properties url-parts opts))))
+
+(defn account []
+  (get-one "/account"))
+
+(defn show-account []
+  (let [a (account)]
+    (println (str "loading data for client: " (a "client_name")))
+    (println (str "          using account: " (:email a)))))
+
+; show the current client on boot
+(try (show-account)
+  (catch Exception e (.getMessage e)))
+

@@ -1,6 +1,6 @@
 (ns xn.import
   (:require [xn.client :as xn]
-            [xn.tools :refer [merge-with-rules]]
+            [xn.tools :refer [merge-with-rules key-mapper vec-wrap]]
             [clojure.data.json :as json]
             [clojure-csv.core :as csv]
             [clojure.string :as s]
@@ -24,16 +24,6 @@
 (defn csv [filename]
   (-> filename slurp csv/parse-csv))
 
-(defn has [f] (partial some f))
-
-(defn files [dir]
-  (->> dir clojure.java.io/file
-    .listFiles
-    (map #(.getPath %))))
-
-(defn csv-files [dir]
-  (filter #(re-find #"\.csv$" %) (files dir)))
-
 (defn page-url? [s]
   (re-find (api-url-regex) s))
 
@@ -55,31 +45,44 @@
 
 ; create-unique -> {keyvalue id}
 (defn create-unique [{:keys [model key ignore errors]} records]
-  (->> (if (map? records) [records] records)
-    (filter key)
-    (map (fn [body]
-           [(body key)
-            (let [result (xn/execute {:method :put
-                                      :url (str "/model/"
-                                                (name (if (fn? model)
-                                                        (model body)
-                                                        model)))
-                                      :query {:unique (name key)}
-                                      :body (apply dissoc body ignore)
-                                      :throw-exceptions false
-                                      })]
-              (if (vector? result)
-                (first result)
-                (do
-                  (clojure.pprint/pprint result)
-                  (when errors (swap! errors assoc (body key) result))
-                  nil)))]))
-    (into {})))
+  (->> records
+       vec-wrap
+       (filter key)
+       (map (fn [body]
+              [(body key)
+               (let [result (xn/execute {:method :put
+                                         :url (str "/model/"
+                                                   (name (if (fn? model)
+                                                           (model body)
+                                                           model)))
+                                         :query {:unique (name key)}
+                                         :body (apply dissoc body ignore)
+                                         :throw-exceptions false})]
+                 (if (vector? result)
+                   (first result)
+                   (do
+                     (clojure.pprint/pprint result)
+                     (when errors (swap! errors assoc (body key) result))
+                     nil)))]))
+       (into {})))
 
-(defn extract-records
-  ([fields records]
-   (extract-records {} {} fields records))
-  ([clean-rules merge-rules fields records]
+(defn map-to-rels [add-or-set fns]
+  (fn [records]
+    (when records
+      {add-or-set (map (apply comp fns) (vec-wrap records))})))
+
+(defn extract-rel-unique [add-or-set model-name field & fns]
+  (map-to-rels add-or-set
+               (cons (fn [value] {:CREATE model-name, :UNIQUE field, field value})
+                     fns)))
+
+(defn extract-rel-non-unique [add-or-set model-name field & fns]
+  (map-to-rels add-or-set
+               (cons (fn [value] {:CREATE model-name, field value})
+                     fns)))
+
+(defn extract [& {:keys [clean merge-rules fields template mappings filters post-merge]
+                  :or {clean {} merge-rules {} template {} mappings [] filters [] post-merge {}}}]
    (let [default-rule (fn [v] (cond
                                 (string? v) (let [v (.trim v)] (when-not (= "" v) v))
                                 (and (number? v) (zero? v)) nil
@@ -87,16 +90,53 @@
          fields (if (map? fields)
                   (filter (fn [[from to]] to) fields)
                   (into {} (map vector fields fields)))]
-     (->> (or records [])
-       (map (fn [r]
-              (->> fields
-                (map (fn [[from to]]
-                       (let [v (r from)
-                             v ((clean-rules from (:default clean-rules default-rule)) v)]
-                         {to v})))
-                (apply merge-with-rules merge-rules))))
-       (filter #(not-every? nil? %))
-       (set)))))
+     (fn extractor [records]
+       (let [records (->> records
+                          vec-wrap
+                          (map (key-mapper clean default-rule))
+                          (map (fn [r]
+                                 (->> fields
+                                      (map (fn [[from to]] {to (r from)}))
+                                      (apply merge-with-rules merge-rules))))
+                          (map (fn [r] (merge template r)))
+                          (filter #(not-every? nil? %))
+                          set)
+             records (reduce (fn [data f] (map f data)) records mappings)
+             records (map (key-mapper post-merge identity) records)
+             records (set records)]
+         (reduce (fn [data f] (filter f data)) records filters)))))
+
+; TODO: remove references to extract-records
+(defn extract-records
+  ([fields records]
+   ((extract :fields fields) records))
+  ([clean-rules merge-rules fields records]
+   ((extract :clean clean-rules :merge merge-rules :fields fields) records)))
+
+(defn extract-rel-records [add-or-set model-name uniques & extract-rules]
+  (fn [records]
+    {add-or-set (->> records
+                     vec-wrap
+                     ((apply extract extract-rules))
+                     (map #(merge {:CREATE model-name :UNIQUE uniques} %)))})) ; set model-name and unique
+
+(defn external [data-source]
+  (fn [id]
+    (when id
+      {:CREATE :external_record :UNIQUE :name
+       :name (str data-source "/" id)})))
+
+(defn set-by-externals [data-source & fns]
+  (map-to-rels :set [(external data-source) fns]))
+
+(defn add-by-externals [data-source & fns]
+  (map-to-rels :add [(external data-source) fns]))
+
+
+
+
+; -------------------------------------------------------------------------
+; hopefully these methods can be removed
 
 (defn set-one-rels [fields records]
   (reduce (fn [records [field rels]]
@@ -113,3 +153,36 @@
                  records))
           records
           fields))
+
+(defn key->id [part key]
+  (->> (xn/make-request {:url (str "is/" (name part) "/properties/" (name key))
+                         :method :get
+                         :query {:limit :1000000}})
+    (map reverse)
+    (map vec)
+    (into {})))
+
+(defn external-ids-map [source-name & parts]
+  (into {}
+        (xn/get-path-properties
+          ["is/data_source" nil
+           "filter/name" nil
+           "rel/external_records" :record_id
+           "rel/record" :xnid
+           (when-not (empty? parts) (str "is/" (s/join "," (map name parts)))) nil]
+          {:query {:name source-name :limit :1000000}})))
+
+(defn external-ids->xnids [source-name parts ids]
+  (if (empty? ids)
+    []
+    (into {}
+          (xn/get-path-properties
+            ["is/data_source" nil
+             "filter/name~1" nil
+             "rel/external_records" :record_id
+             "filter/name~2" nil
+             "rel/record" :xnid
+             (when-not (empty? parts) (str "is/" (s/join "," (map name parts)))) nil]
+            {:query {:limit :1000000
+                     "name~1" source-name
+                     "name~2[value]" (s/join "," ids)}}))))
