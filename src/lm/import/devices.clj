@@ -178,8 +178,8 @@
 
 (def ip-records
   (extract :template {:CREATE :ip :UNIQUE :name}
-           :fields {:class         :model_name
-                    :id            :id
+           :clean {:id (external "Remedy")}
+           :fields {:id            :external_ids
                     :name          :name
                     :description   :description
                     :ccl1          nil
@@ -230,8 +230,7 @@
                              :manufacturer {:CREATE :manufacturer :UNIQUE :name
                                             :name manufacturer}}}
                     device)
-         device))
-     #(xn.repl/prident "here" %)]
+         device))]
     :post-merge {:location (extract-rel-unique :add :location :name) }
     :filters [:class]
     :fields {:class                      :class
@@ -268,10 +267,16 @@
              :ips                        :interfaces}
     ))
 
-(println filename)
-(def json (take 10 (i/json-lines filename)))
-(count json)
-(device-records json)
+(comment
+  (println filename)
+  (def json (take 10 (i/json-lines filename)))
+  (count json)
+  (clojure.pprint/pprint (device-records json))
+  (create-unique
+    {:model #(:class %) :key :name
+     :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number :manufacturer :ips}}
+    (device-records json))
+  )
 
 (defn make-devices [raw]
   (create-unique

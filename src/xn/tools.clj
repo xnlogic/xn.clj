@@ -62,3 +62,8 @@
   (let [values (remove nil? ((apply juxt keys) map))]
     (when-not (empty? values)
       (vec values))))
+
+(defn vec-wrap [x]
+  (cond (sequential? x) x
+        x [x]
+        :else []))

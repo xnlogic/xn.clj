@@ -1,6 +1,6 @@
 (ns xn.import
   (:require [xn.client :as xn]
-            [xn.tools :refer [merge-with-rules key-mapper]]
+            [xn.tools :refer [merge-with-rules key-mapper vec-wrap]]
             [clojure.data.json :as json]
             [clojure-csv.core :as csv]
             [clojure.string :as s]
@@ -45,40 +45,42 @@
 
 ; create-unique -> {keyvalue id}
 (defn create-unique [{:keys [model key ignore errors]} records]
-  (->> (if (map? records) [records] records)
-    (filter key)
-    (map (fn [body]
-           [(body key)
-            (let [result (xn/execute {:method :put
-                                      :url (str "/model/"
-                                                (name (if (fn? model)
-                                                        (model body)
-                                                        model)))
-                                      :query {:unique (name key)}
-                                      :body (apply dissoc body ignore)
-                                      :throw-exceptions false
-                                      })]
-              (if (vector? result)
-                (first result)
-                (do
-                  (clojure.pprint/pprint result)
-                  (when errors (swap! errors assoc (body key) result))
-                  nil)))]))
-    (into {})))
+  (->> records
+       vec-wrap
+       (filter key)
+       (map (fn [body]
+              [(body key)
+               (let [result (xn/execute {:method :put
+                                         :url (str "/model/"
+                                                   (name (if (fn? model)
+                                                           (model body)
+                                                           model)))
+                                         :query {:unique (name key)}
+                                         :body (apply dissoc body ignore)
+                                         :throw-exceptions false})]
+                 (clojure.pprint/pprint result)
+                 (if (vector? result)
+                   (first result)
+                   (do
+                     (clojure.pprint/pprint result)
+                     (when errors (swap! errors assoc (body key) result))
+                     nil)))]))
+       (into {})))
 
 (defn map-to-rels [add-or-set fns]
   (fn [records]
-    {add-or-set (map (apply juxt fns) records)}))
+    (when records
+      {add-or-set (map (apply comp fns) (vec-wrap records))})))
 
 (defn extract-rel-unique [add-or-set model-name field & fns]
   (map-to-rels add-or-set
-               [(fn [value] {:CREATE model-name, :UNIQUE field, field value})
-                fns]))
+               (cons (fn [value] {:CREATE model-name, :UNIQUE field, field value})
+                     fns)))
 
 (defn extract-rel-non-unique [add-or-set model-name field & fns]
   (map-to-rels add-or-set
-               [(fn [value] {:CREATE model-name, field value})
-                fns]))
+               (cons (fn [value] {:CREATE model-name, field value})
+                     fns)))
 
 (defn extract [& {:keys [clean merge-rules fields template mappings filters post-merge]
                   :or {clean {} merge-rules {} template {} mappings [] filters [] post-merge {}}}]
@@ -90,22 +92,19 @@
                   (filter (fn [[from to]] to) fields)
                   (into {} (map vector fields fields)))]
      (fn extractor [records]
-       (let [records (->> (cond (sequential? records) records
-                               records [records]
-                               :else [])
-                         (map (key-mapper clean default-rule))
-                         (map (fn [r]
-                                (->> fields
-                                     (map (fn [[from to]] {to (r from)}))
-                                     (apply merge-with-rules merge-rules))))
-                         (map (fn [r] (merge template r)))
-                         (filter #(not-every? nil? %))
-                         set)
+       (let [records (->> records
+                          vec-wrap
+                          (map (key-mapper clean default-rule))
+                          (map (fn [r]
+                                 (->> fields
+                                      (map (fn [[from to]] {to (r from)}))
+                                      (apply merge-with-rules merge-rules))))
+                          (map (fn [r] (merge template r)))
+                          (filter #(not-every? nil? %))
+                          set)
              records (reduce (fn [data f] (map f data)) records mappings)
-             records (set records)
              records (map (key-mapper post-merge identity) records)
-             records (set records)
-             ]
+             records (set records)]
          (reduce (fn [data f] (filter f data)) records filters)))))
 
 ; TODO: remove references to extract-records
@@ -117,7 +116,8 @@
 
 (defn extract-rel-records [add-or-set model-name uniques & extract-rules]
   (fn [records]
-    {add-or-set (->> (if (sequential? records) records [records])
+    {add-or-set (->> records
+                     vec-wrap
                      ((apply extract extract-rules))
                      (map #(merge {:CREATE model-name :UNIQUE uniques} %)))})) ; set model-name and unique
 
