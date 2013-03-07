@@ -72,13 +72,13 @@
 
 (defn extract-rel-unique [add-or-set model-name field & fns]
   (map-to-rels add-or-set
-         (fn [value] {:CREATE model-name, :UNIQUE field, field value})
-         fns))
+               [(fn [value] {:CREATE model-name, :UNIQUE field, field value})
+                fns]))
 
 (defn extract-rel-non-unique [add-or-set model-name field & fns]
   (map-to-rels add-or-set
-         (fn [value] {:CREATE model-name, field value})
-         fns))
+               [(fn [value] {:CREATE model-name, field value})
+                fns]))
 
 (defn extract [& {:keys [clean merge-rules fields template mappings filters post-merge]
                   :or {clean {} merge-rules {} template {} mappings [] filters [] post-merge {}}}]
@@ -89,23 +89,26 @@
          fields (if (map? fields)
                   (filter (fn [[from to]] to) fields)
                   (into {} (map vector fields fields)))]
-     (fn [records]
-       (->> (cond (sequential? records) records
-                  records [records]
-                  :else [])
-            (map (key-mapper clean default-rule))
-            (map (fn [r]
-                   (->> fields
-                        (map (fn [[from to]] {to (r from)}))
-                        (apply merge-with-rules merge-rules))))
-            (map (fn [r] (merge template r)))
-            (filter #(not-every? nil? %))
-            set
-            (fn [extracted] (reduce (fn [data f] (map f data)) extracted mappings))
-            (map (key-mapper post-merge identity))
-            set
-            (fn [extracted] (reduce (fn [data f] (filter f data)) extracted filters))))))
+     (fn extractor [records]
+       (let [records (->> (cond (sequential? records) records
+                               records [records]
+                               :else [])
+                         (map (key-mapper clean default-rule))
+                         (map (fn [r]
+                                (->> fields
+                                     (map (fn [[from to]] {to (r from)}))
+                                     (apply merge-with-rules merge-rules))))
+                         (map (fn [r] (merge template r)))
+                         (filter #(not-every? nil? %))
+                         set)
+             records (reduce (fn [data f] (map f data)) records mappings)
+             records (set records)
+             records (map (key-mapper post-merge identity) records)
+             records (set records)
+             ]
+         (reduce (fn [data f] (filter f data)) records filters)))))
 
+; TODO: remove references to extract-records
 (defn extract-records
   ([fields records]
    ((extract :fields fields) records))
@@ -120,14 +123,15 @@
 
 (defn external [data-source]
   (fn [id]
-    {:CREATE :external_record :UNIQUE :name
-     :name (str data-source "/" id)}))
+    (when id
+      {:CREATE :external_record :UNIQUE :name
+       :name (str data-source "/" id)})))
 
 (defn set-by-externals [data-source & fns]
-  (map-to-rels :set (external data-source) fns))
+  (map-to-rels :set [(external data-source) fns]))
 
 (defn add-by-externals [data-source & fns]
-  (map-to-rels :add (external data-source) fns))
+  (map-to-rels :add [(external data-source) fns]))
 
 
 

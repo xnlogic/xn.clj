@@ -1,8 +1,9 @@
 (ns lm.import.devices
   (:require [xn.client :as xn]
-            [xn.import :as i :refer [extract-records create-unique set-one-rels add-many-rels]]
+            [xn.import :as i :refer [extract external extract-rel-unique
+                                     create-unique]]
             [clojure.string :as s]
-            [xn.tools :refer [vectorize]]))
+            [xn.tools :refer [vectorize get-some lower-case]]))
 
 
 (def class-name-map {"Remedy::Server"           :server,
@@ -186,13 +187,11 @@
                     :ccl3          nil}))
 
 (defn interfaces-with-ips [ips]
-  (->> ips
-       ip-records
-       (fn [records]
-         {:add (map-indexed (fn [n record]
-                              {:name (str "eth" n)
-                               :ip record})
-                            records)})))
+  {:add (map-indexed (fn [n record]
+                       {:CREATE :interface
+                        :name (str "eth" n)
+                        :ip record})
+                     (ip-records ips))})
 
 (def device-records
   (extract
@@ -206,32 +205,33 @@
             :room lower-case
             :name lower-case
             :hpsa_status lower-case
-             }
+            :hpsa_id (external "HPSA")
+            :id (external "Remedy")}
     :merge-rules {:cc vectorize
                   :location (fn [a b]
                               (cond
                                 (s/blank? a) b
                                 (s/blank? b) a
                                 :else (str a " - " b)))}
-    :mappings [(fn [device] ; Apply model mapped from cc
-                 (if-let [model (cc-map (:cc device))]
-                   (assoc device :class model)
-                   device))
-               (fn [device] ; Set model name from model number if it's blank
-                 (if (:model device)
-                   device
-                   (assoc device :model (:model_number device))))
-               (fn [device] ; Apply model and data cleanup for manufacturer and model
-                 (if-let [[manufacturer model class] (model-cleanup ((juxt :manufacturer :model) device))]
-                   (-> device
-                       (merge {:class class
-                               :model {:CREATE :model :UNIQUE :name
-                                       :name model
-                                       :model_number (:model_number device)
-                                       :manufacturer {:CREATE :manufacturer :UNIQUE :name
-                                                      :name manufacturer}} model})
-                       (dissoc :model_number :manufacturer))
-                   device))]
+    :mappings
+    [(fn [device]
+       (cond-> device
+         (cc-map (:cc device)) (assoc ,, :class (cc-map (:cc device)))
+         (not (:model device)) (assoc ,, :model (:model_number device))
+         (:hpsa_id device)     (update-in ,, [:hpsa_id] #(assoc % :status (:hpsa_status device)))
+         #_true                  #_(update-in ,, [:external_ids] get-some :id :hpsa_id)))
+     (fn [device]
+       (if-let [[manufacturer model class] (model-cleanup ((juxt :manufacturer :model) device))]
+         (merge {:class class
+                     :model {:CREATE :model
+                             :UNIQUE :name
+                             :name model
+                             :model_number (:model_number device)
+                             :manufacturer {:CREATE :manufacturer :UNIQUE :name
+                                            :name manufacturer}}}
+                    device)
+         device))
+     #(xn.repl/prident "here" %)]
     :post-merge {:location (extract-rel-unique :add :location :name) }
     :filters [:class]
     :fields {:class                      :class
@@ -268,51 +268,16 @@
              :ips                        :interfaces}
     ))
 
-(defn make-manufacturers [records]
-  (->> records
-    (extract-records {:manufacturer :name})
-    (create-unique {:model :manufacturer :key :name})))
+(println filename)
+(def json (take 10 (i/json-lines filename)))
+(count json)
+(device-records json)
 
-(defn make-models [records]
-  (let [manufacturers (make-manufacturers records)]
-    (->> records
-      (extract-records {:model        :name
-                        :model_number :model_number
-                        :manufacturer :manufacturer})
-      (set-one-rels {:manufacturer manufacturers})
-      (create-unique {:model :device_model :key :name}))))
-
-
-(defn make-remedy [records]
-  (let [remedy-id ((create-unique {:model :data_source :key :name}
-                                  {:name "Remedy" :direction "in"})
-                     "Remedy")]
-    (->> records
-      (extract-records {:id :record_id})
-      (map #(assoc % :data_source remedy-id))
-      (create-unique {:model :external_record :key :record_id}))))
-
-(defn make-hpsa [records]
-  (let [hpsa-id ((create-unique {:model :data_source :key :name}
-                                {:name "HPSA" :direction "in"})
-                   "HPSA")]
-    (->> records
-      (extract-records {:hpsa_id     :record_id
-                        :hpsa_status :status})
-      (map #(assoc % :data_source hpsa-id))
-      (create-unique {:model :external_record :key :record_id}))))
-
-(defn make-devices [raw & {:keys [records models locations external]}]
-  (let [records   (or records   (device-records raw))
-        models    (or models    (make-models records))
-        remedy    (or external  (make-remedy records))
-        hpsa      (or external  (make-hpsa records))]
-    (cond->>  records
-      true    (map #(assoc % :external_records (remove nil? ((juxt :id :hpsa_id) %))))
-      true    (set-one-rels {:model models :location locations})
-      true    (add-many-rels {:external_records (or external (merge remedy hpsa))})
-      true    (create-unique {:model #(:class %) :key :name
-                              :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number :ips}}))))
+(defn make-devices [raw]
+  (create-unique
+    {:model #(:class %) :key :name
+     :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number :manufacturer :ips}}
+    (device-records raw)))
 
 (defn load! [filename]
   (let [raw (i/json-lines filename)]

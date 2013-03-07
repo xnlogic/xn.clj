@@ -45,15 +45,20 @@
        list))))
 
 (defn lower-case [s]
-  (when s (s/lower-case s)))
+  (when s (s/lower-case (str s))))
 
 (defn key-mapper
   ([fn-map]
    (key-mapper fn-map identity))
   ([fn-map default]
-   (map (fn [r]
-          (into {}
-                (map (fn [[key value]]
-                       [key (fn-map key (:default fn-map default))])
-                     r))))))
+   (fn [r]
+     (into {}
+           (map (fn [[key value]]
+                  (when value
+                    [key ((fn-map key (:default fn-map default)) value)]))
+                r)))))
 
+(defn get-some [map & keys]
+  (let [values (remove nil? ((apply juxt keys) map))]
+    (when-not (empty? values)
+      (vec values))))
