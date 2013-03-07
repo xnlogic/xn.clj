@@ -58,7 +58,6 @@
                                          :query {:unique (name key)}
                                          :body (apply dissoc body ignore)
                                          :throw-exceptions false})]
-                 (clojure.pprint/pprint result)
                  (if (vector? result)
                    (first result)
                    (do

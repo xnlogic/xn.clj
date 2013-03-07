@@ -3,6 +3,7 @@
             [xn.import :as i :refer [extract external extract-rel-unique
                                      create-unique]]
             [clojure.string :as s]
+            [xn.repl :refer [prident]]
             [xn.tools :refer [vectorize get-some lower-case]]))
 
 
@@ -193,6 +194,14 @@
                         :ip record})
                      (ip-records ips))})
 
+(defn model-record [manufacturer model model-num]
+  {:model {:add {:CREATE :device_model
+                 :UNIQUE [:name :model_number]
+                 :name model
+                 :model_number model-num
+                 :manufacturer {:set {:CREATE :manufacturer :UNIQUE :name
+                                      :name manufacturer}}}}})
+
 (def device-records
   (extract
     :clean {:class class-name-map
@@ -218,19 +227,16 @@
        (cond-> device
          (cc-map (:cc device)) (assoc ,, :class (cc-map (:cc device)))
          (not (:model device)) (assoc ,, :model (:model_number device))
-         (:hpsa_id device)     (update-in ,, [:hpsa_id] #(assoc % :status (:hpsa_status device)))
-         #_true                  #_(update-in ,, [:external_ids] get-some :id :hpsa_id)))
+         (:hpsa_id device)     (update-in ,, [:hpsa_id] #(assoc % :status (:hpsa_status device)))))
      (fn [device]
-       (if-let [[manufacturer model class] (model-cleanup ((juxt :manufacturer :model) device))]
-         (merge {:class class
-                     :model {:CREATE :model
-                             :UNIQUE :name
-                             :name model
-                             :model_number (:model_number device)
-                             :manufacturer {:CREATE :manufacturer :UNIQUE :name
-                                            :name manufacturer}}}
-                    device)
-         device))]
+       (assoc device :external_records (get-some device :id :hpsa_id)))
+     (fn [device]
+       (let [[manufacturer model class :as found] (model-cleanup ((juxt :manufacturer :model) device))]
+         (merge
+           (if found
+             (assoc device :class class)
+             device)
+           (model-record manufacturer model (:model_number device)))))]
     :post-merge {:location (extract-rel-unique :add :location :name) }
     :filters [:class]
     :fields {:class                      :class
@@ -269,16 +275,17 @@
 
 (comment
   (println filename)
-  (def json (take 10 (i/json-lines filename)))
+  (def json (take 100 (i/json-lines filename)))
   (count json)
   (clojure.pprint/pprint (device-records json))
-  (create-unique
+  (time (create-unique
     {:model #(:class %) :key :name
      :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number :manufacturer :ips}}
-    (device-records json))
+    (device-records json)))
   )
 
 (defn make-devices [raw]
+  (create-unique {:model :data_source :key :name} [{:name "Remedy"} {:name "HPSA"}])
   (create-unique
     {:model #(:class %) :key :name
      :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number :manufacturer :ips}}
