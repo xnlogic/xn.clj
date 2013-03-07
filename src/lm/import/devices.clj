@@ -196,7 +196,7 @@
 
 (defn model-record [manufacturer model model-num]
   {:model {:add {:CREATE :device_model
-                 :UNIQUE [:name :model_number]
+                 :UNIQUE :name
                  :name (or model model-num)
                  :model_number (when-not model model-num)
                  :manufacturer (when manufacturer
