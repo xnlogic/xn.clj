@@ -136,15 +136,20 @@
 
 
 ; -------------------------------------------------------------------------
-; hopefully these methods can be removed
+; These should not be needed very often. Much clearer to build up a nested
+; object that defines or finds all of the related elements in one requset.
 
-(defn set-one-rels [fields records]
+(defn set-one-rels
+  "Use this when you already know the id of the related record"
+  [fields records]
   (reduce (fn [records [field rels]]
             (map (fn [r] (update-in r [field] #(rels %))) records))
           records
           fields))
 
-(defn add-many-rels [fields records]
+(defn add-many-rels
+  "Use this when you already know the id of the related record"
+  [fields records]
   (reduce (fn [records [field rels]]
             (map (fn [r] (update-in
                            r [field]
@@ -153,6 +158,11 @@
                  records))
           records
           fields))
+
+; -------------------------------------------------------------------------
+; Built these before I added the ability to post nested elements or URLs like
+; /is/asset/external_id/Source/ID,ID2/properties/name which make having a map
+; of external ids to xnids or ids much less necessary.
 
 (defn key->id [part key]
   (->> (xn/make-request {:url (str "is/" (name part) "/properties/" (name key))
