@@ -290,13 +290,13 @@
   )
 
 
-(defn make-devices [raw]
+(defn make-devices [raw & info]
   (create-unique {:model :data_source :key :name} [{:name "Remedy"} {:name "HPSA"}])
   (create-unique
     {:model #(:class %) :key :name
      :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number :manufacturer :ips}}
-    (device-records raw)))
+    (apply device-records raw info)))
 
-(defn load! [filename]
+(defn load! [filename & {:keys [notes]}]
   (let [raw (i/json-lines filename)]
-    (make-devices raw)) )
+    (make-devices raw :filename filename :notes notes)) )

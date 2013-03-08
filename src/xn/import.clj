@@ -42,15 +42,17 @@
 (defn record-url-matcher [& parts]
   (match-url (re-pattern (str #"^/is/" (s/join "," parts) #"/\d+/?$"))))
 
-(defn create-one [{:keys [model ignore errors command] :as opts} body]
+(defn create-one [{:keys [model ignore errors options] :as opts} body]
   (when (map? body)
-    (let [result (xn/execute {:method :put
-                              :url (str "/model/"
-                                        (name (if (fn? model)
-                                                (model body)
-                                                model)))
-                              :body (apply dissoc body ignore)
-                              :throw-exceptions false})]
+    (let [result (xn/execute (merge
+                               {:method :put
+                                :url (str "/model/"
+                                          (name (if (fn? model)
+                                                  (model body)
+                                                  model)))
+                                :body (apply dissoc body ignore)
+                                :throw-exceptions false}
+                               options))]
       (if (vector? result)
         (first result)
         (do
@@ -62,7 +64,7 @@
   {:pre [key]}
   (when (and (map? body) (body key))
     [(body key)
-     (create-one (assoc opts :command {:query {:unique (name key)}})
+     (create-one (assoc opts :options {:query {:unique (name key)}})
                  body)]))
 
 ; create-unique -> {keyvalue id}
@@ -131,7 +133,8 @@
 (defn extract [& opts]
   (fn [records & {:keys [filename notes]}]
     (let [import (when (or filename notes)
-                      (create-one {:model :import} {:filename filename :notes notes}))
+                      (create-one {:model :import :options {:throw-exceptions true}}
+                                  {:filename filename :notes notes}))
           extractor (apply extract-one :import import opts)]
       (->> records
            vec-wrap
