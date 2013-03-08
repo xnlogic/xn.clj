@@ -65,5 +65,7 @@
 
 (defn vec-wrap [x]
   (cond (sequential? x) x
-        x [x]
-        :else []))
+        (set? x) x
+        (map? x) [x]
+        (nil? x) []
+        :else [x]))

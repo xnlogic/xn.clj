@@ -42,23 +42,28 @@
 (defn record-url-matcher [& parts]
   (match-url (re-pattern (str #"^/is/" (s/join "," parts) #"/\d+/?$"))))
 
+(defn create-one [{:keys [model ignore errors command] :as opts} body]
+  (when (map? body)
+    (let [result (xn/execute {:method :put
+                              :url (str "/model/"
+                                        (name (if (fn? model)
+                                                (model body)
+                                                model)))
+                              :body (apply dissoc body ignore)
+                              :throw-exceptions false})]
+      (if (vector? result)
+        (first result)
+        (do
+          (clojure.pprint/pprint result)
+          (when errors (swap! errors assoc (body key) result))
+          nil)))))
+
 (defn create-one-unique [{:keys [model key ignore errors] :as opts} body]
-  (when (and (body key) (map? (body key)))
+  {:pre [key]}
+  (when (and (map? body) (body key))
     [(body key)
-     (let [result (xn/execute {:method :put
-                               :url (str "/model/"
-                                         (name (if (fn? model)
-                                                 (model body)
-                                                 model)))
-                               :query {:unique (name key)}
-                               :body (apply dissoc body ignore)
-                               :throw-exceptions false})]
-       (if (vector? result)
-         (first result)
-         (do
-           (clojure.pprint/pprint result)
-           (when errors (swap! errors assoc (body key) result))
-           nil)))]))
+     (create-one (assoc opts :command {:query {:unique (name key)}})
+                 body)]))
 
 ; create-unique -> {keyvalue id}
 (defn create-unique [{:keys [key] :as opts} records]
@@ -84,42 +89,52 @@
 
 (defn extract-one [& {:keys [clean merge-rules fields template mappings filters post-merge import]
                       :or {clean {} merge-rules {} template {} mappings [] filters [] post-merge {}}}]
-  (letfn [(default-rule [v]
-            (cond
-              (string? v)      (let [v (.trim v)] (when-not (= "" v) v))
-              (and (number? v) (zero? v)) nil
-              :else            v))
-          (rename-and-merge [r]
-            (->> fields
-                 (map (fn [[from to]] {to (r from)}))
-                 (apply merge-with-rules merge-rules)))
-          (apply-template [r] (merge template r))
-          (not-blank [r]
-            (when (not-every? nil? r) r))
-          (apply-mappings [r]
-            (reduce (fn [data f] (f data)) record mappings))
-          (apply-filters [r]
-            (when (every? #(% r) filters) r))]
-    (let [clean-fields (key-mapper clean default-rule)
-          finalize-fields (key-mapper post-merge identity)])
-    (fn [record]
-      (some-> record
-              clean-fields
-              rename-and-merge
-              apply-template
-              not-blank
-              apply-mappings
-              finalize-fields
-              apply-filters))))
-
-(defn extract [& {:keys [fields import] :as opts}]
-  (let [default-rule
-        fields (if (map? fields)
+  (let [fields (if (map? fields)
                  (filter (fn [[from to]] to) fields)
-                 (into {} (map vector fields fields)))
-        extractor (apply extract-one-record opts)]
-    (fn [records]
+                 (into {} (map vector fields fields)))]
+    (letfn [(default-rule [v]
+              (cond
+                (string? v)                 (let [v (.trim v)] (when-not (= "" v) v))
+                (and (number? v) (zero? v)) nil
+                :else                       v))
+            (rename-and-merge [r]
+              (->> fields
+                   (map (fn [[from to]] {to (r from)}))
+                   (apply merge-with-rules merge-rules)))
+            (apply-template [r] (merge template r))
+            (not-blank [r]
+              (when (not-every? nil? r) r))
+            (apply-mappings [r]
+              (reduce (fn [data f] (f data)) r mappings))
+            (apply-filters [r]
+              (when (every? #(% r) filters) r))
+            (add-to-import [source]
+              (if import
+                (fn [r]
+                  (assoc r :import_records {:CREATE :import_record
+                                            :data source
+                                            :import {:set import}}))
+                identity))]
+      (let [clean-fields (key-mapper clean default-rule)
+            finalize-fields (key-mapper post-merge identity)]
+        (fn [record]
+          (some-> record
+                  clean-fields
+                  rename-and-merge
+                  apply-template
+                  not-blank
+                  apply-mappings
+                  finalize-fields
+                  apply-filters
+                  ((add-to-import record))))))))
+
+(defn extract [& opts]
+  (fn [records & {:keys [filename notes]}]
+    (let [import (when (or filename notes)
+                      (create-one {:model :import} {:filename filename :notes notes}))
+          extractor (apply extract-one :import import opts)]
       (->> records
+           vec-wrap
            (map extractor)
            set))))
 

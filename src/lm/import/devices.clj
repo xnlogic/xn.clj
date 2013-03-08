@@ -282,12 +282,13 @@
   (println filename)
   (def json (take 100 (i/json-lines filename)))
   (count json)
-  (clojure.pprint/pprint (device-records json))
+  (clojure.pprint/pprint (device-records json :filename "abc" :notes "finally doing something about this"))
   (time (create-unique
-    {:model #(:class %) :key :name
-     :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number :manufacturer :ips}}
-    (device-records json)))
+          {:model #(:class %) :key :name
+           :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number :manufacturer :ips}}
+          (device-records json :filename "abc" :notes "finally doing something about this")))
   )
+
 
 (defn make-devices [raw]
   (create-unique {:model :data_source :key :name} [{:name "Remedy"} {:name "HPSA"}])
