@@ -195,13 +195,14 @@
                      (ip-records ips))})
 
 (defn model-record [manufacturer model model-num]
-  {:model {:add {:CREATE :device_model
-                 :UNIQUE :name
-                 :name (or model model-num)
-                 :model_number (when-not model model-num)
-                 :manufacturer (when manufacturer
-                                 {:set {:CREATE :manufacturer :UNIQUE :name
-                                        :name manufacturer}})}}})
+  (if (and model manufacturer)
+    {:model {:add {:CREATE :device_model
+                   :UNIQUE :name
+                   :name (or model model-num)
+                   :model_number (when-not model model-num)
+                   :manufacturer (when manufacturer
+                                   {:set {:CREATE :manufacturer :UNIQUE :name
+                                          :name manufacturer}})}}}))
 
 (def device-records
   (extract
@@ -280,9 +281,15 @@
 
 (comment
   (println filename)
-  (def json (take 100 (i/json-lines filename)))
+  (def json (take 100 (drop 100 (i/json-lines filename))))
+  (def json (i/json-lines filename))
   (count json)
-  (clojure.pprint/pprint (device-records json :filename "abc" :notes "finally doing something about this"))
+  (->> (device-records json :filename "abc" :notes "finally doing something about this")
+       (map :model)
+       (map :add)
+       (remove nil?)
+       (filter (comp nil? :name))
+       )
   (time (create-unique
           {:model #(:class %) :key :name
            :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number :manufacturer :ips}}
