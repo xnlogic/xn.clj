@@ -6,4 +6,5 @@
                  [clj-http "0.6.3"]
                  [clojure-csv/clojure-csv "2.0.0-alpha2"]
                  [fipp "0.1.0-SNAPSHOT"]]
+  :plugins [[lein-kibit "0.0.7"]]
   :repl-options {:port 59999})

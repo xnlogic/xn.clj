@@ -175,7 +175,7 @@
   "Use this when you already know the id of the related record"
   [fields records]
   (reduce (fn [records [field rels]]
-            (map (fn [r] (update-in r [field] #(rels %))) records))
+            (map (fn [r] (update-in r [field] rels)) records))
           records
           fields))
 
@@ -211,7 +211,7 @@
            "filter/name" nil
            "rel/external_records" :record_id
            "rel/record" :xnid
-           (when-not (empty? parts) (str "is/" (s/join "," (map name parts)))) nil]
+           (when (seq parts) (str "is/" (s/join "," (map name parts)))) nil]
           {:query {:name source-name :limit :1000000}})))
 
 (defn external-ids->xnids [source-name parts ids]
@@ -224,7 +224,7 @@
              "rel/external_records" :record_id
              "filter/name~2" nil
              "rel/record" :xnid
-             (when-not (empty? parts) (str "is/" (s/join "," (map name parts)))) nil]
+             (when (seq parts) (str "is/" (s/join "," (map name parts)))) nil]
             {:query {:limit :1000000
                      "name~1" source-name
                      "name~2[value]" (s/join "," ids)}}))))

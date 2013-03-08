@@ -16,7 +16,7 @@
     (let [merge-entry (fn [m e]
                         (let [k (key e) v (val e)]
                           (if (contains? m k)
-                            (assoc m k ((rules k (:default rules last)) (get m k) v))
+                            (update-in m [k] (rules k (:default rules last)) v)
                             (assoc m k v))))
           merge2 (fn [m1 m2]
                    (reduce merge-entry (or m1 {}) (seq m2)))]
@@ -60,7 +60,7 @@
 
 (defn get-some [map & keys]
   (let [values (remove nil? ((apply juxt keys) map))]
-    (when-not (empty? values)
+    (when (seq values)
       (vec values))))
 
 (defn vec-wrap [x]
