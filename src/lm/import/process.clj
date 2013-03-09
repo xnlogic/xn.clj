@@ -130,7 +130,6 @@
 
 ; File 10
 
-
 (def solutions
   (extract
     :fields {:class nil
@@ -151,13 +150,14 @@
     :merge-rules {:availability (fn [supported required] (or required supported))}
     :clean {:id (external "Remedy")
             :infrastructure_system
-            (extract-rel-records :add :system :name
-                                 :fields {:id :external_ids
-                                          :name :name
-                                          :description :description
-                                          :devices :network_devices}
-                                 :clean {:id (external "Remedy")
-                                         :devices (map-to-rels :add (fn [device]
-                                                                      ; TODO
-                                                                      {:external_records (str "Remedy/" (:id device))}))})}))
+            (extract-rel-records
+              :add :system :name
+              :fields {:id :external_ids
+                       :name :name
+                       :description :description
+                       :devices :network_devices}
+              :clean {:id (external "Remedy")
+                      :devices (map-to-rels :add (fn [device]
+                                        ; TODO
+                                        {:external_records (str "Remedy/" (:id device))}))})}))
 
