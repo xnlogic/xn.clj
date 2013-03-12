@@ -2,7 +2,8 @@
   (:require [xn.client :as xn]
             [xn.import :as i :refer [extract create-unique extract-rel-unique
                                      external external-name add-by-externals
-                                     map-to-rels extract-rel-records]]
+                                     map-to-rels extract-rel-records
+                                     csv json-lines json-file]]
             [clojure.string :as s]
             [xn.tools :refer [vectorize make-set lower-case]]))
 
@@ -10,12 +11,16 @@
 ; File 01
 (def dc-sites
   (extract
+    :reader csv
+    :create-unique {:model :datacenter :key :name}
     :row [nil nil :description :name]))
 
 ; File 02
 (def subnets
   (extract
+    :reader csv
     ;Subnet,SubnetName,SubnetMask,NetworkAddress,LocationID,Street1,City,State,Country,Domain,TftpServer,DNSServers,DefaultRouters,DHCPServer,DHCPOptionTemplate,
+    :create-unique {:model :subnet :key :name}
     :row [:subnet :description :mask]
     :fields (array-map
              :subnet :network_address
@@ -29,6 +34,8 @@
 ; File 03
 (def ip-subnet
   (extract
+    :reader json-file
+    :create-unique {:model :subnet :key :name}
     :pre [:ip_subnet]
     :clean {:primary_key (external "Remedy")}
     :fields {:description :description
@@ -45,10 +52,14 @@
 ; NOTES:
 ; * these should be created unique based on the remedy external id... how can we do that?
 ; * look up a map of pod/zones from existing records and make associations
+(def device-model->model {})
+
 (def nmdb-devices
   (extract
+    :reader json-lines
+    :create-unique {:model #(:class %) :key :name}
     :fields {:class nil
-             :device_model_type :CREATE
+             :device_model_type :class
              :id :external_records
              :ciid :external_records
              :hostname :name
@@ -74,7 +85,8 @@
             :id (external "NMDB")
             :ciid (external "Remedy")
             :project (extract-rel-unique :add :project :name #(first (s/split % #" ")))
-            }
+            :hostname lower-case
+            :device_model_type device-model->model }
     :merge-rules {:zone vectorize}
     ))
 
@@ -86,9 +98,12 @@
 ; File 07
 ;  * should be looked up by the external record
 (def hpsa-servers (extract
+  :reader json-lines
+  :create {:model #(:class %)
+           :ignore #{:is_hypervisor :management_ip :primary_ip :class}}
   :pre [:sas_server]
   :fields (partition 2 ; Allow server_id to be mapped to 2 different fields
-            [:server_id :external-records
+            [:server_id :external_records
              :server_id :EXTERNAL_ID
              :display_name :name
              :is_hypervisor :is_hypervisor
@@ -102,9 +117,11 @@
                                                   :name n :type "Operating System" }))}
   :post-merge {:external-records (external "HPSA")
                :EXTERNAL_ID (external-name "HPSA")}
-  :mappings [(fn [r] (cond (= "Y" (:is_hypervisor r)) :vm_host
-                           (:virtualization_type_id r) :vm
-                           :else :server))
+  :mappings [(fn [r]
+               (assoc r :class
+                      (cond (= "Y" (:is_hypervisor r))  :vm_host
+                            (:virtualization_type_id r) :vm
+                            :else                       :server)))
              (fn [r] (assoc r :interfaces
                             (if (= (:management_ip r) (:primary_ip r))
                               (ifaces-with-ip [["eth0" "User-Facing" (:management_ip r)]])
@@ -113,6 +130,8 @@
 
 ; File 08
 (def nmdb-ips (extract
+  :reader json-file
+  :create-unique {:model :ip :key :name}
   :pre [:ip_address]
   :fields {:AssignedToGoNet nil
            :AssignedToiServ nil
@@ -131,6 +150,8 @@
 (def solutions
   (extract
     ;Make fields an array-map to ensure that fields are processed for merge in the defined order
+    :reader json-lines
+    :create-unique {:model :solution :key :name}
     :fields (array-map
              :class nil
              :id :external_records

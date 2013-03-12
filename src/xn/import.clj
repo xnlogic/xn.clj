@@ -68,10 +68,16 @@
                  body)]))
 
 ; create-unique -> {keyvalue id}
-(defn create-unique [{:keys [key] :as opts} records]
+(defn create-unique [opts records]
   (->> records
        vec-wrap
        (map #(create-one-unique opts %))
+       (into {})))
+
+(defn create [opts records]
+  (->> records
+       vec-wrap
+       (map #(create-one opts %))
        (into {})))
 
 (defn map-to-rels [add-or-set fns]
