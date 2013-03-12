@@ -1,9 +1,6 @@
 (ns lm.import.process
+  (:use xn.import)
   (:require [xn.client :as xn]
-            [xn.import :as i :refer [extract create-unique extract-rel-unique
-                                     external external-name add-by-externals
-                                     map-to-rels extract-rel-records
-                                     csv json-lines json-file]]
             [clojure.string :as s]
             [xn.tools :refer [vectorize make-set lower-case]]))
 
