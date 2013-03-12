@@ -9,6 +9,7 @@
 (def dc-sites
   (extract
     :reader csv
+    :skip-rows 1
     :create-unique {:model :datacenter :key :name}
     :row [nil nil :description :name]))
 
@@ -16,7 +17,7 @@
 (def subnets
   (extract
     :reader csv
-    ;Subnet,SubnetName,SubnetMask,NetworkAddress,LocationID,Street1,City,State,Country,Domain,TftpServer,DNSServers,DefaultRouters,DHCPServer,DHCPOptionTemplate,
+    :skip-rows 1
     :create-unique {:model :subnet :key :name}
     :row [:subnet :description :mask]
     :fields (array-map

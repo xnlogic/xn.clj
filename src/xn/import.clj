@@ -95,7 +95,7 @@
                (cons (fn [value] {:CREATE model-name, field value})
                      fns)))
 
-(defn extract-one [& {:keys [pre row clean merge-rules fields template mappings
+(defn- extract-one* [{:keys [pre row clean merge-rules fields template mappings
                              filters post-merge import]
                       :or {clean {} merge-rules {} template {} mappings []
                            filters [] post-merge {} pre []}}]
@@ -149,18 +149,33 @@
                   apply-filters
                   ((add-to-import record))))))))
 
-(defn extract [& {:as opts :keys [create create-unique reader]}]
-  (fn [& {:keys [records filename notes]}]
+(defn extract-one [& {:as opts}]
+  (extract-one* opts))
+
+(defn extract [& {:as opts :keys [create create-unique reader skip-rows]
+                  :or {skip-rows 0}}]
+  (fn [& {:keys [records filename notes run offset limit]
+          :or {offset skip-rows limit 99999999}}]
     {:pre [(or records (and filename reader))]}
     (let [records (or records (reader filename))
           import (when (or filename notes)
                       (create-one {:model :import :options {:throw-exceptions true}}
                                   {:filename filename :notes notes}))
-          extractor (apply extract-one :import import opts)]
-      (->> records
-           vec-wrap
-           (map extractor)
-           set))))
+          extractor (extract-one* (assoc opts :import import))]
+      (let [results (->> records
+                         vec-wrap
+                         (drop offset)
+                         (take limit)
+                         (map extractor))]
+        (if run
+          (cond
+            create
+            (xn.import/create create results)
+            create-unique
+            (xn.import/create-unique create-unique results)
+            :else
+            results)
+          results)))))
 
 ; TODO: remove references to extract-records
 (defn extract-records
