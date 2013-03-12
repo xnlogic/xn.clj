@@ -108,7 +108,7 @@
               (reduce (fn [data f] (f data)) data pre))
             (make-maps-from-rows [data]
               (if (and row (sequential? data))
-                (zipmap row data)
+                (map vector row data)
                 data))
             (default-rule [v]
               (cond
