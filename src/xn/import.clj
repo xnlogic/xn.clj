@@ -89,16 +89,27 @@
                (cons (fn [value] {:CREATE model-name, field value})
                      fns)))
 
-(defn extract-one [& {:keys [clean merge-rules fields template mappings filters post-merge import]
-                      :or {clean {} merge-rules {} template {} mappings [] filters [] post-merge {}}}]
-  (let [fields (if (map? fields)
+(defn extract-one [& {:keys [pre row clean merge-rules fields template mappings
+                             filters post-merge import]
+                      :or {clean {} merge-rules {} template {} mappings []
+                           filters [] post-merge {} pre []}}]
+  {:pre [(or fields row)]}
+  (let [fields (or fields (remove nil? row))
+        fields (if (map? fields)
                  (filter (fn [[from to]] to) fields)
                  (into {} (map vector fields fields)))]
-    (letfn [(default-rule [v]
+    (letfn [(apply-pre-fns [data]
+              (reduce (fn [data f] (f data)) data pre))
+            (make-maps-from-rows [data]
+              (if (and row (sequential? data))
+                (zipmap row data)
+                data))
+            (default-rule [v]
               (cond
-                (string? v)                 (let [v (.trim v)] (when-not (= "" v) v))
-                (and (number? v) (zero? v)) nil
-                :else                       v))
+                (string? v)      (let [v (.trim v)] (when-not (= "" v) v))
+                (and (number? v)
+                     (zero? v))  nil
+                :else            v))
             (rename-and-merge [r]
               (->> fields
                    (map (fn [[from to]] {to (r from)}))
@@ -121,6 +132,8 @@
             finalize-fields (key-mapper post-merge identity)]
         (fn [record]
           (some-> record
+                  apply-pre-fns
+                  make-maps-from-rows
                   clean-fields
                   rename-and-merge
                   apply-template
@@ -160,6 +173,10 @@
     (when id
       {:CREATE :external_record :UNIQUE :name
        :name (str data-source "/" id)})))
+
+(defn external-name [data-source]
+  (fn [id]
+    (when id (str data-source "/" id))) )
 
 (defn set-by-externals [data-source & fns]
   (map-to-rels :set [(external data-source) fns]))
