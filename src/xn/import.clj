@@ -149,9 +149,11 @@
                   apply-filters
                   ((add-to-import record))))))))
 
-(defn extract [& opts]
-  (fn [records & {:keys [filename notes]}]
-    (let [import (when (or filename notes)
+(defn extract [& {:as opts :keys [create create-unique reader]}]
+  (fn [& {:keys [records filename notes]}]
+    {:pre [(or records (and filename reader))]}
+    (let [records (or records (reader filename))
+          import (when (or filename notes)
                       (create-one {:model :import :options {:throw-exceptions true}}
                                   {:filename filename :notes notes}))
           extractor (apply extract-one :import import opts)]
