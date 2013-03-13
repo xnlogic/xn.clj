@@ -189,11 +189,14 @@
    ((extract :clean clean-rules :merge merge-rules :fields fields) records)))
 
 (defn extract-rel-records [add-or-set model-name uniques & extract-rules]
+  {:pre [add-or-set model-name]}
   (fn [records]
     {add-or-set (->> records
                      vec-wrap
                      ((apply extract extract-rules))
-                     (map #(merge {:CREATE model-name :UNIQUE uniques} %)))})) ; set model-name and unique
+                     (map #(merge {:CREATE model-name}
+                                  (when uniques {:UNIQUE uniques})
+                                  %)))}))
 
 (defn external [data-source]
   (fn [id]
