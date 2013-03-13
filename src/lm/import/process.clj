@@ -41,7 +41,66 @@
     :mappings [(fn [r] (assoc r :name (:network_address r)))]
     ))
 
-; File 04 -- update then use dc_subnets.clj
+; File 04 -- run first data-centers, then dc-zones (this updates & improves dc_subnets.clj)
+(def data-centers
+  (extract
+    :reader json-file
+    :create-unique {:model :datacenter :key :name}
+    :pre [#(assoc % :pods (count (:pods %)) )]
+    :fields {:name :name
+             :id :external_records}
+    :clean {:id (external "NMDB")}))
+
+(def dc-zones
+  (extract
+    :reader (fn [filename]
+              (letfn [(pod-zone<-dc [dcs]
+                        (mapcat (fn [dc]
+                                  (let [dc-name (:name dc) ]
+                                    (map (fn [zone]
+                                           (-> zone
+                                               (assoc :parent_zone {:set {:name dc-name}})
+                                               (update-in [:pod] #(str dc-name " / " %))))
+                                         (apply concat (:pods dc)))))
+                                dcs))]
+                (-> filename json-file pod-zone<-dc)))
+    :create {:model :zone}
+    :fields {:name :name
+             :id :external_records
+             :parent_zone :parent_zone
+             :pod :pod
+             :subnets :subnets
+             :vlans :vlans}
+    :clean {:id (external "NMDB")
+            :subnets (extract-rel-records
+                       :add :subnet :network_address
+                       :fields {:name :name
+                                :subnet :network_address
+                                :id :external_records
+                                :direction :direction
+                                :notes :description}
+                       :clean {:id (external "NMDB")})
+            :vlans (extract-rel-records
+                     :add :vlan :name
+                     :fields {:primary_vlan :primary_vlan
+                              :vlan :name
+                              :id :external_id
+                              :direction :direction
+                              :vlan_type :vlan_type
+                              :notes :description}
+                     :clean {:id (external "NMDB")})}
+    :mappings [(fn [r]
+                   (if (= "n/a" (lower-case (:name r))) ; no heirarchy
+                     (-> r
+                         (assoc :name (:pod r))
+                         (dissoc :pod))
+                     (let [dc (:parent_zone r)] ; build zone heirarchy
+                       (-> r
+                           (assoc :parent_zone
+                                  {:add {:CREATE :zone :UNIQUE :name
+                                         :name (:pod r)
+                                         :parent_zone dc}})
+                           (dissoc :pod)))))]))
 
 ; File 05 -- use devices.clj
 
