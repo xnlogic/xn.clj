@@ -142,7 +142,7 @@
               (when (not-every? nil? r) r))
             (apply-mappings [r]
               (reduce (fn [data f]
-                        {:post [#(map? %)]}
+                        {:post [(map? %)]}
                         (f data))
                       r mappings))
             (apply-filters [r]

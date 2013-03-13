@@ -4,7 +4,8 @@
 
 (defn prident
   ([x] (pprint x) x)
-  ([s x] (print (str s ": ")) (pprint x) x))
+  ([s x] (print (str s ": ")) (pprint x) x)
+  ([s a x] (print (str s ": ")) (pprint a) (pprint x) x))
 
 (defn info [name [id valn record :as result]]
   (if id

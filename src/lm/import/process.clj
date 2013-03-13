@@ -108,23 +108,26 @@
 ; NOTES:
 ; * these should be created unique based on the remedy external id... how can we do that?
 ; * look up a map of pod/zones from existing records and make associations
-(def device-model->model {})
+(def device-model->model (atom {}))
+(def pod-zone->id (atom {}))
 
 (def nmdb-devices
   (extract
     :reader json-lines
     :create-unique {:model #(:class %) :key :name}
-    :fields {:class nil
-             :device_model_type :class
-             :id :external_records
-             :ciid :external_records
-             :hostname :name
-             :description :description
-             :pod :zone
-             :zone :zone
-             :project :projects
-             :datacenter nil
-             :interfaces :interfaces}
+    :fields (array-map
+              :class nil
+              :id :external_records
+              :ciid :external_records
+              :hostname :name
+              :description :description
+              :datacenter :zone
+              :pod        :zone
+              :zone       :zone
+              :project :projects
+              :interfaces :interfaces
+              :device_model_type         :class
+              :device_model      [:model :class])
     :clean {:interfaces (extract-rel-records :add :interface nil
                           :fields {:class nil
                                    :id :id
@@ -140,10 +143,19 @@
             :id (external "NMDB")
             :ciid (external "Remedy")
             :project (extract-rel-unique :add :project :name #(first (s/split % #" ")))
-            :hostname lower-case
-            :device_model_type #(device-model->model % :server)}
+            :hostname lower-case }
+    :merge-rules {:zone vectorize
+                  :class vectorize
+                  :external_records vectorize}
+    :post-merge {:model (extract-rel-unique :set :model :name)
+                 :class @device-model->model
+                 :zone (fn [[datacenter pod zone]]
+                         (when (and datacenter pod zone)
+                           (if (= "n/a" zone)
+                             (@pod-zone->id [datacenter pod])
+                             (@pod-zone->id [datacenter pod zone]))))}
     :filters [:class]
-    :merge-rules {:zone vectorize}))
+    ))
 
 (def ifaces-with-ip
   (extract-rel-records :add :interface nil
