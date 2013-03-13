@@ -41,7 +41,62 @@
     :mappings [(fn [r] (assoc r :name (:network_address r)))]
     ))
 
-; File 04 -- update then use dc_subnets.clj
+; File 04 -- run first data-centers, then dc-zones
+(def data-centers
+  (extract
+    :reader json-file
+    :create-unique {:model :datacenter :key :name}
+    :pre [#(assoc % :pods (count (:pods %)) )]
+    :fields {:name :name
+             :id :external_records}
+    :clean {:id (external "NMDB")}))
+
+(def dc-zones
+  (extract
+    :reader json-file
+    :create {:model :zone}
+    :pre [(fn pod/zone<-dc [dcs]
+            (mapcat (fn [dc]
+                      (prident "DC" dc)
+                      (let [dc-name (prident "dc" (:name dc)) ]
+                        (map #(assoc % :parent-zone {:set {:name dc-name}})
+                             (:pods dc))))
+                    dcs))]
+    :fields {:name :name
+             :id :external_records
+             :pod :pod
+             :subnets :subnets
+             :vlans :vlans}
+    :clean {:id (external "NMDB")
+            :subnets (extract-rel-records
+                       :add :subnet :network_address
+                       :fields {:name :name
+                                :subnet :network_address
+                                :id :external_records
+                                :direction :direction
+                                :notes :description}
+                       :clean {:id (external "NMDB")})
+            :vlans (extract-rel-records
+                     :add :vlan :name
+                     :fields {:primary_vlan :primary_vlan
+                              :name :name
+                              :id :external_id
+                              :direction :direction
+                              :vlan_type :vlan_type
+                              :notes :description}
+                     :clean {:id (external "NMDB")})}
+    :mappings [(fn [r]
+                   (if (= "n/a" (lower-case (:name r)))
+                     (-> r
+                         (assoc :name (:pod r)) ; replace name with pod name
+                         (dissoc :pod))
+                     (let [dc (:parent-zone r)]
+                       (-> r
+                           (assoc :parent-zone
+                                  {:add {:CREATE :zone :UNIQUE :name
+                                         :name (:pod r)
+                                         :parent-zone dc}})
+                           (dissoc :pod)))))]))
 
 ; File 05 -- use devices.clj
 

@@ -119,7 +119,7 @@
     (letfn [(apply-pre-fns [data]
               (reduce (fn [data f] (f data)) data pre))
             (make-maps-from-rows [data]
-              {:post [(map? %)]}
+              {:post [#(map? %)]}
               (if (and row (sequential? data))
                 (map vector row data)
                 data))
@@ -142,7 +142,7 @@
               (when (not-every? nil? r) r))
             (apply-mappings [r]
               (reduce (fn [data f]
-                        {:post [(map? %)]}
+                        {:post [#(map? %)]}
                         (f data))
                       r mappings))
             (apply-filters [r]
