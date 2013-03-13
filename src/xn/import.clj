@@ -78,7 +78,7 @@
   (->> records
        vec-wrap
        (map #(create-one opts %))
-       (into {})))
+       set))
 
 (defn map-to-rels [add-or-set fns]
   (fn [records]
