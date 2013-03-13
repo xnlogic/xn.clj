@@ -4,7 +4,6 @@
             [clojure.string :as s]
             [xn.tools :refer [vectorize make-set lower-case]]))
 
-
 ; File 01
 (def dc-sites
   (extract
