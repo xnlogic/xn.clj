@@ -1,5 +1,5 @@
 (ns lm.import.process
-  (:use xn.import)
+  (:use xn.import xn.repl)
   (:require [xn.client :as xn]
             [clojure.string :as s]
             [xn.tools :refer [vectorize make-set lower-case]]))
@@ -82,7 +82,8 @@
             :ciid (external "Remedy")
             :project (extract-rel-unique :add :project :name #(first (s/split % #" ")))
             :hostname lower-case
-            :device_model_type device-model->model}
+            :device_model_type #(device-model->model % :server)}
+    :filters [:class]
     :merge-rules {:zone vectorize}))
 
 (def ifaces-with-ip
@@ -110,6 +111,7 @@
                                                    :name n :type "Operating System" })])}
   :post-merge {:external-records (external "HPSA")
                :EXTERNAL_ID (external-name "HPSA")}
+  :filters [:class]
   :mappings [(fn [r]
                (assoc r :class
                       (cond (= "Y" (:is_hypervisor r))  :vm_host

@@ -43,6 +43,8 @@
   (match-url (re-pattern (str #"^/is/" (s/join "," parts) #"/\d+/?$"))))
 
 (defn create-one [{:keys [model ignore errors options] :as opts} body]
+  {:pre [(map? body)
+         (if (fn? model) (model body) model)]}
   (when (map? body)
     (let [result (xn/execute (merge
                                {:method :put
@@ -81,16 +83,22 @@
        set))
 
 (defn map-to-rels [add-or-set fns]
+  {:pre [add-or-set
+         (sequential? fns)]}
   (fn [records]
     (when records
       {add-or-set (map (apply comp fns) (vec-wrap records))})))
 
 (defn extract-rel-unique [add-or-set model-name field & fns]
+  {:pre [model-name field]}
   (map-to-rels add-or-set
-               (cons (fn [value] {:CREATE model-name, :UNIQUE field, field value})
+               (cons (fn [value]
+                       (when value
+                         {:CREATE model-name, :UNIQUE field, field value}))
                      fns)))
 
 (defn extract-rel-non-unique [add-or-set model-name field & fns]
+  {:pre [model-name field]}
   (map-to-rels add-or-set
                (cons (fn [value] {:CREATE model-name, field value})
                      fns)))
@@ -99,7 +107,11 @@
                              filters post-merge import]
                       :or {clean {} merge-rules {} template {} mappings []
                            filters [] post-merge {} pre []}}]
-  {:pre [(or fields row)]}
+  {:pre [(or fields row)
+         (every? map? [clean merge-rules template post-merge])
+         (every? vector? [mappings filters pre])
+         (every? #(every? ifn? %) [mappings pre filters])
+         (every? #(every? ifn? (vals %)) [clean merge-rules post-merge])]}
   (let [fields (or fields (remove nil? row))
         fields (if (map? fields)
                  (filter (fn [[from to]] to) fields)
@@ -107,6 +119,7 @@
     (letfn [(apply-pre-fns [data]
               (reduce (fn [data f] (f data)) data pre))
             (make-maps-from-rows [data]
+              {:post [(map? %)]}
               (if (and row (sequential? data))
                 (map vector row data)
                 data))
@@ -128,7 +141,10 @@
             (not-blank [r]
               (when (not-every? nil? r) r))
             (apply-mappings [r]
-              (reduce (fn [data f] (f data)) r mappings))
+              (reduce (fn [data f]
+                        {:post [(map? %)]}
+                        (f data))
+                      r mappings))
             (apply-filters [r]
               (when (every? #(% r) filters) r))
             (add-to-import [source]
