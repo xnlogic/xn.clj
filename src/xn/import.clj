@@ -118,7 +118,11 @@
                 :else            v))
             (rename-and-merge [r]
               (->> fields
-                   (map (fn [[from to]] {to (r from)}))
+                   (mapcat (fn renamer [[from to]]
+                             (cond
+                               (keyword? to) [{to (r from)}]
+                               (sequential? to) (mapcat #(renamer [from %]) to)
+                               :else [])))
                    (apply merge-with-rules merge-rules)))
             (apply-template [r] (merge template r))
             (not-blank [r]
@@ -154,8 +158,8 @@
 
 (defn extract [& {:as opts :keys [create create-unique reader skip-rows]
                   :or {skip-rows 0}}]
-  (fn [& {:keys [records filename notes run offset limit]
-          :or {offset skip-rows limit 99999999}}]
+  (fn [records & {:keys [filename notes run offset limit]
+                  :or {offset skip-rows limit 99999999}}]
     {:pre [(or records (and filename reader))]}
     (let [records (or records (reader filename))
           import (when (or filename notes)
@@ -196,6 +200,10 @@
     (when id
       {:CREATE :external_record :UNIQUE :name
        :name (str data-source "/" id)})))
+
+(defn create-data-sources [& names]
+  (create-unique {:model :data_source :key :name}
+                 (map (fn [name] {:name name}) names)))
 
 (defn external-name [data-source]
   (fn [id]

@@ -67,13 +67,12 @@
              :project :projects
              :datacenter nil
              :interfaces :interfaces}
-    :clean {:interfaces (extract
-                          :template {:CREATE :interface}
+    :clean {:interfaces (extract-rel-records :add :interface nil
                           :fields {:class nil
                                    :id :id
                                    :name :name
                                    :direction :direction
-                                   :type "NETwork",
+                                   :type nil  ; TODO not sure about this
                                    :speed :speed
                                    :duplex :duplex
                                    :media :cable_type
@@ -84,9 +83,8 @@
             :ciid (external "Remedy")
             :project (extract-rel-unique :add :project :name #(first (s/split % #" ")))
             :hostname lower-case
-            :device_model_type device-model->model }
-    :merge-rules {:zone vectorize}
-    ))
+            :device_model_type device-model->model}
+    :merge-rules {:zone vectorize}))
 
 (def ifaces-with-ip
   (extract-rel-records :add :interface nil
@@ -100,19 +98,17 @@
   :create {:model #(:class %)
            :ignore #{:is_hypervisor :management_ip :primary_ip :class}}
   :pre [:sas_server]
-  :fields (partition 2 ; Allow server_id to be mapped to 2 different fields
-            [:server_id :external_records
-             :server_id :EXTERNAL_ID
-             :display_name :name
-             :is_hypervisor :is_hypervisor
-             :management_ip :management_ip
-             :notes :description
-             :primary_ip :primary_ip
-             :reported_os :software
-             :virtualization_type_id :virtualization_type_id])
+  :fields {:server_id [:external_records :EXTERNAL_ID]
+           :display_name :name
+           :is_hypervisor :is_hypervisor
+           :management_ip :management_ip
+           :notes :description
+           :primary_ip :primary_ip
+           :reported_os :software
+           :virtualization_type_id :virtualization_type_id}
   :clean {:display_name lower-case
-          :reported_os (map-to-rels :add (fn [n] {:CREATE :software :UNIQUE :name
-                                                  :name n :type "Operating System" }))}
+          :reported_os (map-to-rels :add [(fn [n] {:CREATE :software :UNIQUE :name
+                                                   :name n :type "Operating System" })])}
   :post-merge {:external-records (external "HPSA")
                :EXTERNAL_ID (external-name "HPSA")}
   :mappings [(fn [r]
@@ -175,8 +171,9 @@
                        :description :description
                        :devices :network_devices}
               :clean {:id (external "Remedy")
-                      :devices (map-to-rels :add (fn [device]
-                                        ; TODO
-                                        {:external_records (str "Remedy/" (:id device))}))})}))
+                      :devices (map-to-rels
+                                 :add
+                                 [(fn [id] {:EXTERNAL_ID (str "Remedy/" id)})
+                                  :id])})}))
 
 

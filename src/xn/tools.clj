@@ -16,7 +16,7 @@
     (let [merge-entry (fn [m e]
                         (let [k (key e) v (val e)]
                           (if (contains? m k)
-                            (update-in m [k] (rules k (:default rules last)) v)
+                            (update-in m [k] (rules k (:default rules (fn [a b] b))) v)
                             (assoc m k v))))
           merge2 (fn [m1 m2]
                    (reduce merge-entry (or m1 {}) (seq m2)))]
