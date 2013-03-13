@@ -115,8 +115,10 @@
     (let [keys (:keys command)]
       (map #(zipmap keys (apply concat %)) (make-request command)))))
 
-(defn get-path-properties [url-parts opts]
-  (map #(vec (apply concat %)) (make-request (->path-properties url-parts opts))))
+(defn get-path-properties
+  ([url-parts] (get-path-properties url-parts nil))
+  ([url-parts opts]
+   (map #(vec (apply concat %)) (make-request (->path-properties url-parts opts)))))
 
 (defn account []
   (get-one "/account"))

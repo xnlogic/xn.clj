@@ -51,6 +51,7 @@
              :id :external_records}
     :clean {:id (external "NMDB")}))
 
+; FIXME: dc-zones is not associating to DCs??
 (def dc-zones
   (extract
     :reader (fn [filename]
@@ -110,6 +111,13 @@
 ; * look up a map of pod/zones from existing records and make associations
 (def device-model->model (atom {}))
 (def pod-zone->id (atom {}))
+
+(defn get-pod-zone->ids []
+  (reset! pod-zone->id
+    (reduce (fn [m [dc pod id]] (assoc m [dc pod] id))
+            {}
+            (concat (get-path-properties ["/is/datacenter,zone" :name "/rel/child_zones" [:name :_id]])
+                    (get-path-properties ["/is/datacenter,zone" :name "/rel/child_zones" :name "/rel/child_zones" [:name :_id]])))))
 
 (def nmdb-devices
   (extract
