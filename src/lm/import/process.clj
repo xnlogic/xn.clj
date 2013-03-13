@@ -41,7 +41,7 @@
     :mappings [(fn [r] (assoc r :name (:network_address r)))]
     ))
 
-; File 04 -- run first data-centers, then dc-zones
+; File 04 -- run first data-centers, then dc-zones (this updates & improves dc_subnets.clj)
 (def data-centers
   (extract
     :reader json-file
@@ -53,17 +53,21 @@
 
 (def dc-zones
   (extract
-    :reader json-file
+    :reader (fn [filename]
+              (letfn [(pod-zone<-dc [dcs]
+                        (mapcat (fn [dc]
+                                  (let [dc-name (:name dc) ]
+                                    (map (fn [zone]
+                                           (-> zone
+                                               (assoc :parent_zone {:set {:name dc-name}})
+                                               (update-in [:pod] #(str dc-name " / " %))))
+                                         (apply concat (:pods dc)))))
+                                dcs))]
+                (-> filename json-file pod-zone<-dc)))
     :create {:model :zone}
-    :pre [(fn pod/zone<-dc [dcs]
-            (mapcat (fn [dc]
-                      (prident "DC" dc)
-                      (let [dc-name (prident "dc" (:name dc)) ]
-                        (map #(assoc % :parent-zone {:set {:name dc-name}})
-                             (:pods dc))))
-                    dcs))]
     :fields {:name :name
              :id :external_records
+             :parent_zone :parent_zone
              :pod :pod
              :subnets :subnets
              :vlans :vlans}
@@ -79,23 +83,23 @@
             :vlans (extract-rel-records
                      :add :vlan :name
                      :fields {:primary_vlan :primary_vlan
-                              :name :name
+                              :vlan :name
                               :id :external_id
                               :direction :direction
                               :vlan_type :vlan_type
                               :notes :description}
                      :clean {:id (external "NMDB")})}
     :mappings [(fn [r]
-                   (if (= "n/a" (lower-case (:name r)))
+                   (if (= "n/a" (lower-case (:name r))) ; no heirarchy
                      (-> r
-                         (assoc :name (:pod r)) ; replace name with pod name
+                         (assoc :name (:pod r))
                          (dissoc :pod))
-                     (let [dc (:parent-zone r)]
+                     (let [dc (:parent_zone r)] ; build zone heirarchy
                        (-> r
-                           (assoc :parent-zone
+                           (assoc :parent_zone
                                   {:add {:CREATE :zone :UNIQUE :name
                                          :name (:pod r)
-                                         :parent-zone dc}})
+                                         :parent_zone dc}})
                            (dissoc :pod)))))]))
 
 ; File 05 -- use devices.clj
