@@ -157,17 +157,19 @@
       (let [clean-fields (key-mapper clean default-rule)
             finalize-fields (key-mapper post-merge identity)]
         (fn [record]
-          (some-> record
-                  apply-pre-fns
-                  make-maps-from-rows
-                  clean-fields
-                  rename-and-merge
-                  apply-template
-                  not-blank
-                  apply-mappings
-                  finalize-fields
-                  apply-filters
-                  ((add-to-import record))))))))
+          (let [record (apply-pre-fns record)]
+            ; use the pre-processed record for the import record so that
+            ; garbage data can be eliminated from the import_record.
+            (some-> record
+                    make-maps-from-rows
+                    clean-fields
+                    rename-and-merge
+                    apply-template
+                    not-blank
+                    apply-mappings
+                    finalize-fields
+                    apply-filters
+                    ((add-to-import record)))))))))
 
 (defn extract-one [& {:as opts}]
   (extract-one* opts))

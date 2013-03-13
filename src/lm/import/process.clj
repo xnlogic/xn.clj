@@ -146,7 +146,7 @@
   (extract
     ;Make fields an array-map to ensure that fields are processed for merge in the defined order
     :reader json-lines
-    :create-unique {:model :solution :key :name}
+    :create-unique {:model :application :key :name}
     :fields (array-map
              :class nil
              :id :external_records
