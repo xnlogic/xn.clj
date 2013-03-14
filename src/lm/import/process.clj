@@ -1,6 +1,6 @@
 (ns lm.import.process
   (:use xn.import xn.repl)
-  (:require [xn.client :as xn]
+  (:require [xn.client :refer [get-path-properties]]
             [clojure.string :as s]
             [xn.tools :refer [vectorize make-set lower-case]]))
 
