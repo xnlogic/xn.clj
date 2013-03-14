@@ -17,7 +17,8 @@
   (extract
     :reader csv
     :skip-rows 1
-    :create-unique {:model :subnet :key :name}
+    :parallel true
+    :create {:model :subnet}
     :row [:subnet :description :mask]
     :fields (array-map
              :subnet :network_address
@@ -32,6 +33,7 @@
 (def ip-subnet
   (extract
     :reader json-file
+    :parallel true
     :create-unique {:model :subnet :key :name}
     :pre [:ip_subnet]
     :clean {:primary_key (external "Remedy")}
@@ -51,7 +53,6 @@
              :id :external_records}
     :clean {:id (external "NMDB")}))
 
-; FIXME: dc-zones is not associating to DCs??
 (def dc-zones
   (extract
     :reader (fn [filename]
@@ -67,13 +68,12 @@
                 (-> filename json-file pod-zone<-dc)))
     :create {:model :zone}
     :fields {:name :name
-             :id :external_records
+             :id [:external_records :EXTERNAL_ID]
              :parent_zone :parent_zone
              :pod :pod
              :subnets :subnets
              :vlans :vlans}
-    :clean {:id (external "NMDB")
-            :subnets (extract-rel-records
+    :clean {:subnets (extract-rel-records
                        :add :subnet :network_address
                        :fields {:name :name
                                 :subnet :network_address
@@ -90,6 +90,8 @@
                               :vlan_type :vlan_type
                               :notes :description}
                      :clean {:id (external "NMDB")})}
+    :post-merge {:external_records (external "NMDB")
+                 :EXTERNAL_ID (external-name "NMDB")}
     :mappings [(fn [r]
                    (if (= "n/a" (lower-case (:name r))) ; no heirarchy
                      (-> r
@@ -114,7 +116,7 @@
 
 (defn get-pod-zone->ids []
   (reset! pod-zone->id
-    (reduce (fn [m [dc pod id]] (assoc m [dc pod] id))
+    (reduce (fn [m data] (assoc m (vec (butlast data)) (last data)))
             {}
             (concat (get-path-properties ["/is/datacenter,zone" :name "/rel/child_zones" [:name :_id]])
                     (get-path-properties ["/is/datacenter,zone" :name "/rel/child_zones" :name "/rel/child_zones" [:name :_id]])))))
@@ -205,6 +207,7 @@
 ; File 08
 (def nmdb-ips (extract
   :reader json-file
+  :parallel true
   :create-unique {:model :ip :key :name}
   :pre [:ip_address]
   :fields {:AssignedToGoNet nil

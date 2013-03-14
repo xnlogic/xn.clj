@@ -48,10 +48,8 @@
   (extract
     :clean {:incidents incident-records
             :rfcs rfc-records
-            :device_ciid (external "Remedy")}
-    :fields {:device_ciid :external_records
-             :device_name nil
-             :device_class nil
+            :device_ciid (external-name "Remedy")}
+    :fields {:device_ciid :EXTERNAL_ID
              :incidents :incidents,
              :rfcs :rfcs}))
 
