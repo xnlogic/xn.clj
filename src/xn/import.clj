@@ -176,13 +176,14 @@
 
 (defn extract [& {:as opts :keys [create create-unique reader skip-rows]
                   :or {skip-rows 0}}]
-  (fn [records & {:keys [filename notes run offset limit]
+  (fn [records & {:keys [filename notes run offset limit import]
                   :or {offset skip-rows limit 99999999}}]
     {:pre [(or records (and filename reader))]}
     (let [records (or records (reader filename))
-          import (when (or filename notes)
-                      (create-one {:model :import :options {:throw-exceptions true}}
-                                  {:filename filename :notes notes}))
+          import (or import
+                     (when (and run (or filename notes))
+                       (create-one {:model :import :options {:throw-exceptions true}}
+                                   {:filename filename :notes notes})))
           extractor (extract-one* (assoc opts :import import))]
       (let [results (->> records
                          vec-wrap
@@ -231,12 +232,12 @@
     (when id (str data-source "/" id))) )
 
 (defn set-by-externals [data-source & fns]
-  (map-to-rels :set [(external data-source) fns]))
+  (map-to-rels :set (cons (fn [id] {:EXTERNAL_ID (str data-source "/" id)})
+                          (seq fns))))
 
 (defn add-by-externals [data-source & fns]
-  (map-to-rels :add [(external data-source) fns]))
-
-
+  (map-to-rels :add (cons (fn [id] {:EXTERNAL_ID (str data-source "/" id)})
+                          (seq fns))))
 
 
 ; -------------------------------------------------------------------------

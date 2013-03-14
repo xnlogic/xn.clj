@@ -218,7 +218,9 @@
            :IsUsed nil
            :iFace nil
            :ip :name}
-  :clean {:ip (comp int read-string str)
+  :clean {:ip (fn [v]
+                (try ((comp long read-string str) v)
+                  (catch Exception e nil)))
           :DNS (extract-rel-unique :add :dns_entry :name)}))
 
 ; File 09 is not imported
@@ -254,9 +256,127 @@
                        :description :description
                        :devices :network_devices}
               :clean {:id (external "Remedy")
-                      :devices (map-to-rels
-                                 :add
-                                 [(fn [id] {:EXTERNAL_ID (str "Remedy/" id)})
-                                  :id])})}))
+                      :devices (add-by-externals "Remedy" :id)})}))
 
+
+(def remedy-projects
+  (extract
+    :reader json-lines
+    :create-unique {:model :project :key :name}
+    :fields {:id :external_records
+             :name :name
+             :description :description
+             :systems :systems,
+             :device_cis :assets
+             }
+    :clean  {:id (external "Remedy")
+             :name lower-case
+             :systems
+             (extract-rel-records
+               :add :system :name
+               :fields {:id :external_records
+                        :name :name
+                        :description :description
+                       ;TODO: define properties or extract rel?
+                       ;:supported_hours nil,
+                       ;:change_windows nil
+                        }
+               :clean  {:id (external "Remedy")})
+             :device_cis (add-by-externals "Remedy" :id)}))
+
+; Problems must be done with or *after* Incidents and RFCs
+(def remedy-problems
+  (extract
+    :reader json-lines
+    :create-unique {:model :problem :key :name}
+    :fields {:status              nil
+             :source_code         nil
+             :class               nil
+             :incidents           :incidents
+             :submitter           :submitter
+             :support_group       :support_group
+             :organization        :customer
+             :short_description   :name
+             :related_cis         :applies_to
+             :submit_date         :submission_date
+             :id                  :external_records
+             :description         :description
+             :rfcs                :rfcs
+             :priority            :priority
+             }
+    :clean {:incidents (add-by-externals "Remedy" :id)
+            :related_cis (add-by-externals "Remedy" :id)
+            :rfcs (add-by-externals "Remedy" :id)
+            :id (external "Remedy")
+            :organization (extract-rel-unique :add :customer :name)
+            :support_group (extract-rel-unique :add :support_group :name)}
+    ))
+
+(def remedy-releases
+  (extract
+    :reader json-lines
+    :create-unique {:model :release :key :name}
+    :fields {:id [:name :external_records]
+             :status nil,
+             :organization :customer
+             :submitter :submitter
+             :submit_date :submission_date
+             :support_group :support_group
+             ;:go_live_date_proposed "2005-06-30T00:00:00-04:00",
+             ;:go_live_date_actual "2006-06-30T00:00:00-04:00",
+             :description :description
+             :rfcs :rfcs}
+    :clean {:organization (extract-rel-unique :set :customer :name)}
+    :post-merge {:external_records (external "Remedy")
+                 :rfcs (add-by-externals "Remedy" :id)
+                 :support_group (extract-rel-unique :set :support_group :name)}))
+
+(def remedy-support-groups
+  (extract))
+
+(def remedy-devices->itsm
+  (extract
+    :reader json-lines
+    :update {:url #(str "/is/managed/external_id/" (:EXTERNAL_ID %))}
+    :fields {:device_ciid :EXTERNAL_ID
+             :incidents :incidents,
+             :rfcs :rfcs}
+    :clean {:incidents
+            (extract-rel-records
+              :add :incident :name
+              :clean {:organization (extract-rel-unique :set :customer :name)
+                      :support_group (extract-rel-unique :set :support_group :name)
+                      :id (external "Remedy")}
+              :fields {:status :status
+                       :impact :impact
+                       :class nil
+                       :submitter :submitter
+                       :support_group :support_group
+                       :organization :customer
+                       :short_description :description
+                       :urgency :urgency
+                       :submit_date :submission_date
+                       :id :external_records
+                       :priority :priority})
+            :rfcs
+            (extract-rel-records
+              :add :rfc :name
+              :clean {:organization (extract-rel-unique :set :customer :name)
+                      :id (external "Remedy")}
+              :merge-rules {:sc vectorize}
+              :fields {:status :status
+                       :class nil
+                       :submitter :submitter
+                       :submitter_email nil
+                       :organization :customer
+                       :service_category_tier_1 :sc
+                       :service_category_tier_2 :sc
+                       :service_category_tier_3 :sc
+                       :short_description :description
+                       :submitter_full_name nil
+                       :submit_date :submission_date
+                       :id :external_records
+                       :project :project})
+            :device_ciid (external-name "Remedy")}
+    ))
 

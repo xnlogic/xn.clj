@@ -9,4 +9,5 @@
                  [clj-stacktrace "0.2.5"]
                  [fipp "0.1.0-SNAPSHOT"]]
   :plugins [[lein-kibit "0.0.7"]]
-  :repl-options {:port 59999})
+  :repl-options {:port 59999}
+  )
