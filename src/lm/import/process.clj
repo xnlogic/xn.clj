@@ -400,3 +400,15 @@
             :device_ciid (external-name "Remedy")}
     ))
 
+(def dc->subnets
+  (extract
+    :reader (fn [file]
+              (->> file
+                   csv
+                   (drop 1)
+                   (group-by first)
+                   (map (fn [[dc subnets]] {:name dc :subnets (map last subnets)}))))
+    :fields {:name :name
+             :subnets :subnets}
+    :clean {:subnets
+            (extract-rel-unique :add :subnet :network_address)}))
