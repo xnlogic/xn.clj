@@ -123,6 +123,7 @@
 
 (def nmdb-devices
   (extract
+    ;TODO: use CI ID as key.
     :reader json-lines
     :create-unique {:model #(:class %) :key :name}
     :fields (array-map
@@ -358,10 +359,7 @@
              :rfcs :rfcs}
     :clean {:incidents
             (extract-rel-records
-              :add :incident :name
-              :clean {:organization (extract-rel-unique :set :customer :name)
-                      :support_group (extract-rel-unique :set :support_group :name)
-                      :id (external "Remedy")}
+              :add :incident nil
               :fields {:status :status
                        :impact :impact
                        :class nil
@@ -371,27 +369,28 @@
                        :short_description :description
                        :urgency :urgency
                        :submit_date :submission_date
-                       :id :external_records
-                       :priority :priority})
+                       :id [:EXTERNAL_ID :external_records]
+                       :priority :priority}
+              :post-merge {:customer (extract-rel-unique :set :customer :name)
+                           :support_group (extract-rel-unique :set :support_group :name)
+                           :EXTERNAL_ID (external-name "Remedy")
+                           :external_records (external "Remedy")})
             :rfcs
             (extract-rel-records
               :add :rfc :name
-              :clean {:organization (extract-rel-unique :set :customer :name)
-                      :id (external "Remedy")}
-              :merge-rules {:sc vectorize}
               :fields {:status :status
                        :class nil
                        :submitter :submitter
                        :submitter_email nil
                        :organization :customer
-                       :service_category_tier_1 :sc
-                       :service_category_tier_2 :sc
-                       :service_category_tier_3 :sc
                        :short_description :description
                        :submitter_full_name nil
                        :submit_date :submission_date
-                       :id :external_records
-                       :project :project})
+                       :id [:EXTERNAL_ID :external_records]
+                       :project :project}
+              :clean {:customer (extract-rel-unique :set :customer :name)
+                      :external_records (external "Remedy")
+                      :EXTERNAL_ID (external-name "Remedy")})
             :device_ciid (external-name "Remedy")}
     ))
 
