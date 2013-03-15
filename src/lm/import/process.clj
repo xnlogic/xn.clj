@@ -332,7 +332,22 @@
                  :support_group (extract-rel-unique :set :support_group :name)}))
 
 (def remedy-support-groups
-  (extract))
+  (extract
+    :reader json-lines
+    :create {:model :support_group}
+    :fields {:status nil
+             :class nil
+             :name :name
+             :organization :customer
+             :ministry nil
+             :support_group_type nil
+             :support_organization nil
+             :id [:EXTERNAL_ID :external_records]
+             :support_group_role nil}
+    :post-merge {:customer (extract-rel-unique :set :customer :name)
+                 :external_records (external "Remedy")
+                 :EXTERNAL_ID (external-name "Remedy")
+                 }))
 
 (def remedy-devices->itsm
   (extract
