@@ -47,11 +47,12 @@
 (def data-centers
   (extract
     :reader json-file
-    :create-unique {:model :datacenter :key :name}
+    :create {:model :datacenter}
     :pre [#(assoc % :pods (count (:pods %)) )]
     :fields {:name :name
-             :id :external_records}
-    :clean {:id (external "NMDB")}))
+             :id [:EXTERNAL_ID :external_records]}
+    :post-merge {:EXTERNAL_ID (external-name "NMDB-DC")
+                 :external_records (external "NMDB-DC")}))
 
 (def dc-zones
   (extract
@@ -74,24 +75,26 @@
              :subnets :subnets
              :vlans :vlans}
     :clean {:subnets (extract-rel-records
-                       :add :subnet :network_address
+                       :add :subnet nil
                        :fields {:name :name
                                 :subnet :network_address
-                                :id :external_records
+                                :id [:EXTERNAL_ID :external_records]
                                 :direction :direction
                                 :notes :description}
-                       :clean {:id (external "NMDB")})
+                       :post-merge {:EXTERNAL_ID (external-name "NMDB-Subnet")
+                                    :external_records (external "NMDB-Subnet")})
             :vlans (extract-rel-records
-                     :add :vlan :name
+                     :add :vlan nil
                      :fields {:primary_vlan :primary_vlan
                               :vlan :name
-                              :id :external_id
+                              :id [:EXTERNAL_ID :external_id]
                               :direction :direction
                               :vlan_type :vlan_type
                               :notes :description}
-                     :clean {:id (external "NMDB")})}
-    :post-merge {:external_records (external "NMDB")
-                 :EXTERNAL_ID (external-name "NMDB")}
+                     :post-merge {:EXTERNAL_ID (external-name "NMDB-VLAN")
+                                  :external_records (external "NMDB-VLAN")})}
+    :post-merge {:external_records (external "NMDB-Zone")
+                 :EXTERNAL_ID (external-name "NMDB-Zone")}
     :mappings [(fn [r]
                    (if (= "n/a" (lower-case (:name r))) ; no heirarchy
                      (-> r
@@ -109,7 +112,6 @@
 
 ; File 06
 ; NOTES:
-; * these should be created unique based on the remedy external id... how can we do that?
 ; * look up a map of pod/zones from existing records and make associations
 (def device-model->model (atom {}))
 (def pod-zone->id (atom {}))
@@ -123,11 +125,12 @@
 
 (def nmdb-devices
   (extract
-    ;TODO: use CI ID as key.
     :reader json-lines
-    :create-unique {:model #(:class %) :key :name}
+    :create {:model #(:class %)}
+    :pre [#(assoc % :EXTERNAL_ID (:ciid %))]
     :fields (array-map
               :class nil
+              :EXTERNAL_ID :EXTERNAL_ID
               :id :external_records
               :ciid :external_records
               :hostname :name
@@ -149,10 +152,11 @@
                                    :duplex :duplex
                                    :media :cable_type
                                    :device nil }
-                          :clean {:id (external "NMDB")
+                          :clean {:id (external "NMDB-IFace")
                                   :media (fn [v] ({"1000T" "CAT6"} v v))})
-            :id (external "NMDB")
+            :EXTERNAL_ID (external-name "Remedy")
             :ciid (external "Remedy")
+            :id (external "NMDB-Device")
             :project (extract-rel-unique :add :project :name #(first (s/split % #" ")))
             :hostname lower-case }
     :merge-rules {:zone vectorize
@@ -191,7 +195,7 @@
   :clean {:display_name lower-case
           :reported_os (map-to-rels :add [(fn [n] {:CREATE :software :UNIQUE :name
                                                    :name n :type "Operating System" })])}
-  :post-merge {:external-records (external "HPSA")
+  :post-merge {:external_records (external "HPSA")
                :EXTERNAL_ID (external-name "HPSA")}
   :filters [:class]
   :mappings [(fn [r]
@@ -206,23 +210,23 @@
                                                ["eth1" "Management" (:management_ip r)]]))))]))
 
 ; File 08
-(def nmdb-ips (extract
-  :reader json-file
-  :parallel true
-  :create-unique {:model :ip :key :name}
-  :pre [:ip_address]
-  :fields {:AssignedToGoNet nil
-           :AssignedToiServ nil
-           :DNS :dns_entries
-           :Description :description
-           :IPSegment nil
-           :IsUsed nil
-           :iFace nil
-           :ip :name}
-  :clean {:ip (fn [v]
-                (try ((comp long read-string str) v)
-                  (catch Exception e nil)))
-          :DNS (extract-rel-unique :add :dns_entry :name)}))
+(def nmdb-ips
+  (extract
+    :reader json-file
+    :parallel true
+    :create-unique {:model :ip :key :name}
+    :pre [:ip_address]
+    :fields {:DNS :dns_entries
+             :Description :description
+             :IPSegment nil ; TODO: is this int actually a FK?
+             :IsUsed nil
+             :iFace nil
+             :ip [:external_records :name]}
+    :post-merge {:external_records (external "NMDB-IP")
+                 :name (fn [v]
+                         (try ((comp long read-string str) v)
+                           (catch Exception e nil)))
+                 :DNS (extract-rel-unique :add :dns_entry :name)}))
 
 ; File 09 is not imported
 
@@ -231,10 +235,10 @@
   (extract
     ;Make fields an array-map to ensure that fields are processed for merge in the defined order
     :reader json-lines
-    :create-unique {:model :application :key :name}
+    :create {:model :application}
     :fields (array-map
              :class nil
-             :id :external_records
+             :id [:EXTERNAL_ID :external_records]
              :name :name
              :description :description
              :recovery_strategy nil,
@@ -248,16 +252,18 @@
              :num_of_users nil
              :infrastructure_system :runs_on_system)
     :merge-rules {:availability (fn [supported required] (or required supported))}
-    :clean {:id (external "Remedy")
-            :infrastructure_system
+    :clean {:infrastructure_system
             (extract-rel-records
-              :add :system :name
-              :fields {:id :external_records
+              :add :system nil
+              :fields {:id [:EXTERNAL_ID :external_records]
                        :name :name
                        :description :description
                        :devices :network_devices}
-              :clean {:id (external "Remedy")
-                      :devices (add-by-externals "Remedy" :id)})}))
+              :post-merge {:EXTERNAL_ID (external-name "Remedy")
+                           :external_records (external "Remedy")
+                           :devices (add-by-externals "Remedy" :id)})}
+    :post-merge {:EXTERNAL_ID (external-name "Remedy")
+                 :external_records (external "Remedy")}))
 
 
 (def remedy-projects
@@ -268,21 +274,21 @@
              :name :name
              :description :description
              :systems :systems,
-             :device_cis :assets
-             }
+             :device_cis :assets}
     :clean  {:id (external "Remedy")
              :name lower-case
              :systems
              (extract-rel-records
-               :add :system :name
-               :fields {:id :external_records
+               :add :system nil
+               :fields {:id [:EXTERNAL_ID :external_records]
                         :name :name
                         :description :description
                        ;TODO: define properties or extract rel?
                        ;:supported_hours nil,
                        ;:change_windows nil
                         }
-               :clean  {:id (external "Remedy")})
+               :post-merge  {:EXTERNAL_ID (external-name "Remedy")
+                             :external_records (external "Remedy")})
              :device_cis (add-by-externals "Remedy" :id)}))
 
 ; Problems must be done with or *after* Incidents and RFCs
