@@ -408,6 +408,7 @@
                    (drop 1)
                    (group-by first)
                    (map (fn [[dc subnets]] {:name dc :subnets (map last subnets)}))))
+    :create-unique {:model :datacenter :key :name}
     :fields {:name :name
              :subnets :subnets}
     :clean {:subnets
