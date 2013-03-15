@@ -36,7 +36,10 @@
       finalize-command
       client/request
       :body
-      read-string)))
+      (#(try (read-string %)
+          (catch Exception e
+            (prn "invalid string" %)
+            {:response %}))))))
 
 (defn get-vec [url]
   (make-request {:method :get :url url}))
