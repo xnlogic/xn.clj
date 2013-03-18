@@ -55,7 +55,7 @@
       [url (first result)]
       (do
         (clojure.pprint/pprint result)
-        (when errors (swap! errors assoc (body key) result))
+        (when errors (swap! errors assoc url [body result]))
         nil))))
 
 (defn- create-one* [{:keys [model ignore errors options] :as opts} body]
@@ -74,17 +74,18 @@
       (first result)
       (do
         (clojure.pprint/pprint result)
-        (when errors (swap! errors assoc (body key) result))
+        (when errors (swap! errors assoc (body key) [body result]))
         nil))))
 
 (defn create-one [opts body]
-  (try (create-one* opts body)
+  (when body
+    (try (create-one* opts body)
     (catch Exception e
       (prn "Unable to create-one" opts body e)
       (.printStackTrace e))
     (catch AssertionError e
       (prn "Unable to create-one" opts body e)
-      (.printStackTrace e))))
+      (.printStackTrace e)))))
 
 (defn create-one-unique [{:keys [model key ignore errors] :as opts} body]
   {:pre [key]}
