@@ -2,7 +2,7 @@
   :description "XN Logic data import tools"
   :url "http://xnlogic.com"
   :jvm-opts ["-Xmx2g" "-XX:+TieredCompilation" "-XX:TieredStopAtLevel=1"]
-  :dependencies [[org.clojure/clojure "1.5.0"]
+  :dependencies [[org.clojure/clojure "1.5.1"]
                  [org.clojure/data.json "0.2.0"]
                  [clj-http "0.6.3"]
                  [clojure-csv/clojure-csv "2.0.0-alpha2"]
