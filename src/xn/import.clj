@@ -42,25 +42,49 @@
 (defn record-url-matcher [& parts]
   (match-url (re-pattern (str #"^/is/" (s/join "," parts) #"/\d+/?$"))))
 
-(defn create-one [{:keys [model ignore errors options] :as opts} body]
+(defn update-one [{:keys [url ignore errors options]} body]
+  {:pre [(map? body)
+         (if (fn? url) (url body) url)]}
+  (let [result (xn/execute (merge
+                             {:method :patch
+                              :url url
+                              :body (apply dissoc body ignore)
+                              :throw-exceptions false}
+                             options))]
+    (if (vector? result)
+      [url (first result)]
+      (do
+        (clojure.pprint/pprint result)
+        (when errors (swap! errors assoc (body key) result))
+        nil))))
+
+(defn- create-one* [{:keys [model ignore errors options] :as opts} body]
   {:pre [(map? body)
          (if (fn? model) (model body) model)]}
-  (when (map? body)
-    (let [result (xn/execute (merge
-                               {:method :put
-                                :url (str "/model/"
-                                          (name (if (fn? model)
-                                                  (model body)
-                                                  model)))
-                                :body (apply dissoc body ignore)
-                                :throw-exceptions false}
-                               options))]
-      (if (vector? result)
-        (first result)
-        (do
-          (clojure.pprint/pprint result)
-          (when errors (swap! errors assoc (body key) result))
-          nil)))))
+  (let [result (xn/execute (merge
+                             {:method :put
+                              :url (str "/model/"
+                                        (name (if (fn? model)
+                                                (model body)
+                                                model)))
+                              :body (apply dissoc body ignore)
+                              :throw-exceptions false}
+                             options))]
+    (if (vector? result)
+      (first result)
+      (do
+        (clojure.pprint/pprint result)
+        (when errors (swap! errors assoc (body key) result))
+        nil))))
+
+(defn create-one [opts body]
+  (try (create-one* opts body)
+    (catch Exception e
+      (prn "Unable to create-one" opts body e)
+      (.printStackTrace e))
+    (catch AssertionError e
+      (prn "Unable to create-one" opts body e)
+      (.printStackTrace e))))
 
 (defn create-one-unique [{:keys [model key ignore errors] :as opts} body]
   {:pre [key]}
@@ -81,6 +105,12 @@
        vec-wrap
        (map #(create-one opts %))
        set))
+
+(defn update [options records]
+  (->> records
+       vec-wrap
+       (map #(update-one options %))
+       (into {})))
 
 (defn map-to-rels [add-or-set fns]
   {:pre [add-or-set
@@ -174,14 +204,14 @@
 (defn extract-one [& {:as opts}]
   (extract-one* opts))
 
-(defn extract [& {:as opts :keys [create create-unique reader skip-rows]
+(defn extract [& {:as opts :keys [run run-opts reader skip-rows]
                   :or {skip-rows 0}}]
-  (fn [records & {:keys [filename notes run offset limit import]
+  (fn [records & {:keys [filename notes execute offset limit import]
                   :or {offset skip-rows limit 99999999}}]
     {:pre [(or records (and filename reader))]}
     (let [records (or records (reader filename))
           import (or import
-                     (when (and run (or filename notes))
+                     (when (and execute (or filename notes))
                        (create-one {:model :import :options {:throw-exceptions true}}
                                    {:filename filename :notes notes})))
           extractor (extract-one* (assoc opts :import import))]
@@ -190,14 +220,8 @@
                          (drop offset)
                          (take limit)
                          (map extractor))]
-        (if run
-          (cond
-            create
-            (xn.import/create create results)
-            create-unique
-            (xn.import/create-unique create-unique results)
-            :else
-            results)
+        (if (and run execute)
+          (run run-opts results)
           results)))))
 
 ; TODO: remove references to extract-records

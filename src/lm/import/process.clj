@@ -9,7 +9,8 @@
   (extract
     :reader csv
     :skip-rows 1
-    :create-unique {:model :datacenter :key :name}
+    :run create-unique
+    :run-opts {:model :datacenter :key :name}
     :row [nil nil :description :name]))
 
 ; File 02
@@ -18,7 +19,8 @@
     :reader csv
     :skip-rows 1
     :parallel true
-    :create {:model :subnet}
+    :run create
+    :run-opts {:model :subnet}
     :row [:subnet :description :mask]
     :fields (array-map
              :subnet :network_address
@@ -34,7 +36,8 @@
   (extract
     :reader json-file
     :parallel true
-    :create-unique {:model :subnet :key :name}
+    :run create-unique
+    :run-opts {:model :subnet :key :name}
     :pre [:ip_subnet]
     :clean {:primary_key (external "Remedy")}
     :fields {:description :description
@@ -47,7 +50,8 @@
 (def data-centers
   (extract
     :reader json-file
-    :create {:model :datacenter}
+    :run create
+    :run-opts {:model :datacenter}
     :pre [#(assoc % :pods (count (:pods %)) )]
     :fields {:name :name
              :id [:EXTERNAL_ID :external_records]}
@@ -67,7 +71,8 @@
                                          (apply concat (:pods dc)))))
                                 dcs))]
                 (-> filename json-file pod-zone<-dc)))
-    :create {:model :zone}
+    :run create
+    :run-opts {:model :zone}
     :fields {:name :name
              :id [:external_records :EXTERNAL_ID]
              :parent_zone :parent_zone
@@ -126,7 +131,8 @@
 (def nmdb-devices
   (extract
     :reader json-lines
-    :create {:model #(:class %)}
+    :run create
+    :run-opts {:model #(:class %)}
     :pre [#(assoc % :EXTERNAL_ID (:ciid %))]
     :fields (array-map
               :class nil
@@ -181,7 +187,8 @@
 ;  * should be looked up by the external record
 (def hpsa-servers (extract
   :reader json-lines
-  :create {:model #(:class %)
+  :run create
+                    :run-opts {:model #(:class %)
            :ignore #{:is_hypervisor :management_ip :primary_ip :class}}
   :pre [:sas_server]
   :fields {:server_id [:external_records :EXTERNAL_ID]
@@ -214,7 +221,8 @@
   (extract
     :reader json-file
     :parallel true
-    :create-unique {:model :ip :key :name}
+    :run create-unique
+    :run-opts {:model :ip :key :name}
     :pre [:ip_address]
     :fields {:DNS :dns_entries
              :Description :description
@@ -235,7 +243,8 @@
   (extract
     ;Make fields an array-map to ensure that fields are processed for merge in the defined order
     :reader json-lines
-    :create {:model :application}
+    :run create
+    :run-opts {:model :application}
     :fields (array-map
              :class nil
              :id [:EXTERNAL_ID :external_records]
@@ -269,7 +278,8 @@
 (def remedy-projects
   (extract
     :reader json-lines
-    :create-unique {:model :project :key :name}
+    :run create-unique
+    :run-opts {:model :project :key :name}
     :fields {:id :external_records
              :name :name
              :description :description
@@ -295,7 +305,8 @@
 (def remedy-problems
   (extract
     :reader json-lines
-    :create-unique {:model :problem :key :name}
+    :run create-unique
+    :run-opts {:model :problem :key :name}
     :fields {:status              nil
              :source_code         nil
              :class               nil
@@ -322,7 +333,8 @@
 (def remedy-releases
   (extract
     :reader json-lines
-    :create-unique {:model :release :key :name}
+    :run create-unique
+    :run-opts {:model :release :key :name}
     :fields {:id [:name :external_records]
              :status nil,
              :organization :customer
@@ -341,7 +353,8 @@
 (def remedy-support-groups
   (extract
     :reader json-lines
-    :create {:model :support_group}
+    :run create
+    :run-opts {:model :support_group}
     :fields {:status nil
              :class nil
              :name :name
@@ -359,7 +372,8 @@
 (def remedy-devices->itsm
   (extract
     :reader json-lines
-    :update {:url #(str "/is/managed/external_id/" (:EXTERNAL_ID %))}
+    :run update
+    :run-opts {:url #(str "/is/managed/external_id/" (:EXTERNAL_ID %))}
     :fields {:device_ciid :EXTERNAL_ID
              :incidents :incidents,
              :rfcs :rfcs}
@@ -408,7 +422,8 @@
                    (drop 1)
                    (group-by first)
                    (map (fn [[dc subnets]] {:name dc :subnets (map last subnets)}))))
-    :create-unique {:model :datacenter :key :name}
+    :run create-unique
+    :run-opts {:model :datacenter :key :name}
     :fields {:name :name
              :subnets :subnets}
     :clean {:subnets
