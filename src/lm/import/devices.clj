@@ -304,6 +304,6 @@
      :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number :manufacturer :ips}}
     (apply device-records raw info)))
 
-(defn load! [filename & {:keys [notes]}]
+(defn load! [filename & {:keys [notes limit] :or {limit 99999999}}]
   (let [raw (i/json-lines filename)]
-    (make-devices raw :filename filename :notes notes)) )
+    (make-devices (take limit raw) :filename filename :notes notes)) )
