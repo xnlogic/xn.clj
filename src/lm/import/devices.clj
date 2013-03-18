@@ -206,6 +206,10 @@
 
 (def device-records
   (extract
+    :reader i/json-lines
+    :run create-unique
+    :run-opts {:model #(:class %) :key :name
+               :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number :manufacturer :ips}}
     :clean {:class class-name-map
             :ips interfaces-with-ips
             :manufacturer lower-case
@@ -278,32 +282,3 @@
              :hpsa_status                :hpsa_status
              :ips                        :interfaces}
     ))
-
-(comment
-  (println filename)
-  (def json (take 100 (drop 100 (i/json-lines filename))))
-  (def json (i/json-lines filename))
-  (count json)
-  (->> (device-records json :filename "abc" :notes "finally doing something about this")
-       (map :model)
-       (map :add)
-       (remove nil?)
-       (filter (comp nil? :name))
-       )
-  (time (create-unique
-          {:model #(:class %) :key :name
-           :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number :manufacturer :ips}}
-          (device-records json :filename "abc" :notes "finally doing something about this")))
-  )
-
-
-(defn make-devices [raw & info]
-  (create-unique {:model :data_source :key :name} [{:name "Remedy"} {:name "HPSA"}])
-  (create-unique
-    {:model #(:class %) :key :name
-     :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number :manufacturer :ips}}
-    (apply device-records raw info)))
-
-(defn load! [filename & {:keys [notes limit] :or {limit 99999999}}]
-  (let [raw (i/json-lines filename)]
-    (make-devices (take limit raw) :filename filename :notes notes)) )
