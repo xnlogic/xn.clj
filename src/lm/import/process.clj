@@ -181,8 +181,8 @@
     :merge-rules {:zone vectorize
                   :class vectorize
                   :external_records vectorize}
-    :post-merge {:model (extract-rel-unique :set :model :name)
-                 :class @device-model->model
+    :post-merge {:model (extract-rel-unique :set :device_model :name)
+                 :class (fn [c] (@device-model->model c))
                  :zone (fn [[datacenter pod zone]]
                          (when (and datacenter pod zone)
                            (if (= "n/a" zone)
@@ -283,7 +283,7 @@
                        :devices :network_devices}
               :post-merge {:EXTERNAL_ID (external-name "Remedy")
                            :external_records (external "Remedy")
-                           :devices (add-by-externals "Remedy" :id)})}
+                           :network_devices (add-by-externals "Remedy" :id)})}
     :post-merge {:EXTERNAL_ID (external-name "Remedy")
                  :external_records (external "Remedy")}))
 
