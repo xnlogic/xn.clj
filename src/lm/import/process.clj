@@ -58,25 +58,27 @@
     :post-merge {:EXTERNAL_ID (external-name "NMDB-DC")
                  :external_records (external "NMDB-DC")}))
 
+(defn pod-zone<-dc [dcs]
+  (mapcat (fn [dc]
+            (let [dc-name (:name dc) ]
+              (map (fn [zone]
+                     (-> zone
+                         (assoc :parent_zone {:set {:name dc-name}})
+                         (update-in [:pod] #(str dc-name " / " %))))
+                   (apply concat (:pods dc)))))
+          dcs))
+
+; On this pass, ignore the zone relationships so that we can correctly
+; create all zones that do have an external ID. After that we will find
+; the correct parent zones to associate or create as needed (see
+; dc-zones->parents)
 (def dc-zones
   (extract
-    :reader (fn [filename]
-              (letfn [(pod-zone<-dc [dcs]
-                        (mapcat (fn [dc]
-                                  (let [dc-name (:name dc) ]
-                                    (map (fn [zone]
-                                           (-> zone
-                                               (assoc :parent_zone {:set {:name dc-name}})
-                                               (update-in [:pod] #(str dc-name " / " %))))
-                                         (apply concat (:pods dc)))))
-                                dcs))]
-                (-> filename json-file pod-zone<-dc)))
+    :reader (fn [filename] (-> filename json-file pod-zone<-dc))
     :run create
     :run-opts {:model :zone}
     :fields {:name :name
              :id [:external_records :EXTERNAL_ID]
-             :parent_zone :parent_zone
-             :pod :pod
              :subnets :subnets
              :vlans :vlans}
     :clean {:subnets (extract-rel-records
@@ -99,7 +101,17 @@
                      :post-merge {:EXTERNAL_ID (external-name "NMDB-VLAN")
                                   :external_records (external "NMDB-VLAN")})}
     :post-merge {:external_records (external "NMDB-Zone")
-                 :EXTERNAL_ID (external-name "NMDB-Zone")}
+                 :EXTERNAL_ID (external-name "NMDB-Zone")}))
+
+(def dc-zones->parents
+  (extract
+    :reader (fn [filename] (-> filename json-file pod-zone<-dc))
+    :run update
+    :run-opts {:url #(str "/model/zone/external_id/" (:EXTERNAL_ID %))}
+    :fields {:id :EXTERNAL_ID
+             :parent_zone :parent_zone
+             :pod :pod}
+    :post-merge {:EXTERNAL_ID (external-name "NMDB-Zone")}
     :mappings [(fn [r]
                    (if (= "n/a" (lower-case (:name r))) ; no heirarchy
                      (-> r
@@ -112,6 +124,7 @@
                                          :name (:pod r)
                                          :parent_zone dc}})
                            (dissoc :pod)))))]))
+
 
 ; File 05 -- use devices.clj
 
