@@ -45,13 +45,14 @@
 (defn update-one [{:keys [url ignore errors options]} body]
   {:pre [(map? body)
          (if (fn? url) (url body) url)]}
-  (let [result (xn/execute (merge
+  (let [url (if (fn? url) (url body) url)
+        result (xn/execute (merge
                              {:method :patch
                               :url url
                               :body (apply dissoc body ignore)
                               :throw-exceptions false}
                              options))]
-    (if (vector? result)
+    (if (xn/stored? result)
       [url (first result)]
       (do
         (clojure.pprint/pprint result)
@@ -70,7 +71,7 @@
                               :body (apply dissoc body ignore)
                               :throw-exceptions false}
                              options))]
-    (if (vector? result)
+    (if (xn/stored? result)
       (first result)
       (do
         (clojure.pprint/pprint result)
@@ -210,6 +211,7 @@
   (fn [records & {:keys [filename notes execute offset limit import]
                   :or {offset skip-rows limit 99999999}}]
     {:pre [(or records (and filename reader))]}
+    (when filename (prn filename :notes notes))
     (let [records (or records (reader filename))
           import (or import
                      (when (and execute (or filename notes))

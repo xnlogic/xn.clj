@@ -17,6 +17,10 @@
               (if (#{\. \/} (first b)) b (str \/ b))))
   ([a b c & more] (apply join-url (join-url a b) c more)))
 
+(defn stored? [result]
+  (and (vector? result)
+       (first result)))
+
 (defn finalize-command [command]
   (merge {:headers {"Authorization" @*token}
           :method :get}
