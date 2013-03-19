@@ -314,6 +314,25 @@
                              :external_records (external "Remedy")})
              :device_cis (add-by-externals "Remedy" :id)}))
 
+(def description-chars
+  {\• "* "
+   \… "..."
+   ;\§ "(section)"
+   \return ""
+   \– "--"
+   \· "-"
+   \ ""
+   \” "\""
+   \“ "\""
+   \½ "1/2"
+   \¿ "?"
+   (char 8216) "'"
+   (char 8217) "'"})
+
+(defn fix-invalid-chars [mapping]
+  (fn [text]
+    (s/join (map #(mapping % %) text))))
+
 ; Problems must be done with or *after* Incidents and RFCs
 (def remedy-problems
   (extract
@@ -340,7 +359,9 @@
             :rfcs (add-by-externals "Remedy" :id)
             :id (external "Remedy")
             :organization (extract-rel-unique :add :customer :name)
-            :support_group (extract-rel-unique :add :support_group :name)}
+            :support_group (extract-rel-unique :add :support_group :name)
+            :description (fix-invalid-chars description-chars)
+            }
     ))
 
 (def remedy-releases
