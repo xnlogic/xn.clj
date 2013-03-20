@@ -1,5 +1,6 @@
 (ns xn.client
   (:require [clojure.data.json :as json]
+            [clojure.string :as s]
             [clj-http.client :as client]))
 
 (def *url-root (atom "http://localhost:8080/v1"))
@@ -16,17 +17,22 @@
               (if (#{\. \/} (first b)) b (str \/ b))))
   ([a b c & more] (apply join-url (join-url a b) c more)))
 
+(defn stored? [result]
+  (and (vector? result)
+       (first result)))
+
 (defn finalize-command [command]
   (merge {:headers {"Authorization" @*token}
           :method :get}
          command
          (when-let [body (:body command)]
            {:body (json/write-str body)})
-         {:url (if-let [url (:url command)]
-                 (cond
-                   (re-find #"^http" url) (throw ())
-                   url
-                   (join-url @*url-root (:url command) ".edn")))}))
+         {:url (when-let [url (:url command)]
+                 (when (re-find #"^http" url) (throw ()))
+                 (str
+                   (join-url @*url-root (:url command) ".edn")
+                   (when (:query command)
+                     (str "?" (s/join "&" (map #(s/join "=" (map name %)) (:query command)))))))}))
 
 (defn make-request [command]
   (binding [*read-eval* false]
@@ -34,7 +40,10 @@
       finalize-command
       client/request
       :body
-      read-string)))
+      (#(try (read-string %)
+          (catch Exception e
+            (prn "invalid string" %)
+            {:response %}))))))
 
 (defn get-vec [url]
   (make-request {:method :get :url url}))
@@ -85,3 +94,48 @@
      (into {})))
   ([name key]
    (key (md name))))
+
+(defn ->path-properties
+  ([url-parts]
+   (let [[path properties]
+         (reduce (fn [[path properties] [segment props]]
+                   (if segment
+                     [(join-url path segment)
+                      (conj properties
+                            (cond (map? props) [(s/join "," (map name (keys props)))
+                                                (mapv (comp keyword name) (vals props))]
+                                  (sequential? props) [(s/join "," (map name props))
+                                                       (mapv (comp keyword name) props)]
+                                  props [(name props) [(keyword (name props))]]
+                                  :else ["" []]))]
+                     [path properties]))
+                 [nil []]
+                 (partition 2 url-parts))]
+     {:method :get
+      :url (s/join "/" (apply vector path "path_properties" (map first properties)))
+      :keys (apply concat (map second properties))}))
+  ([url-parts opts]
+   (merge (->path-properties url-parts) opts)))
+
+(defn get-path-maps [url-parts opts]
+  (let [command (->path-properties url-parts opts)]
+    (let [keys (:keys command)]
+      (map #(zipmap keys (apply concat %)) (make-request command)))))
+
+(defn get-path-properties
+  ([url-parts] (get-path-properties url-parts nil))
+  ([url-parts opts]
+   (map #(vec (apply concat %)) (make-request (->path-properties url-parts opts)))))
+
+(defn account []
+  (get-one "/account"))
+
+(defn show-account []
+  (let [a (account)]
+    (println (str "loading data for client: " (a "client_name")))
+    (println (str "          using account: " (:email a)))))
+
+; show the current client on boot
+(try (show-account)
+  (catch Exception e (.getMessage e)))
+
