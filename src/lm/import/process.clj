@@ -161,7 +161,8 @@
   (extract
     :reader json-lines
     :run create
-    :run-opts {:model #(:class %)}
+    :run-opts {:model #(:class %)
+               :change-model true}
     :pre [#(assoc % :EXTERNAL_ID (:ciid %))]
     :fields (array-map
               :class nil

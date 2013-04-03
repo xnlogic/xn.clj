@@ -59,18 +59,18 @@
         (when errors (swap! errors assoc url [body result]))
         nil))))
 
-(defn- create-one* [{:keys [model ignore errors options] :as opts} body]
+(defn- create-one* [{:keys [model ignore errors options change-model] :as opts} body]
   {:pre [(map? body)
          (if (fn? model) (model body) model)]}
-  (let [result (xn/execute (merge
+  (let [model-name (name (if (fn? model) (model body) model))
+        result (xn/execute (merge-with-rules {:query merge}
                              {:method :put
-                              :url (str "/model/"
-                                        (name (if (fn? model)
-                                                (model body)
-                                                model)))
+                              :url (str "/model/" model-name)
                               :body (apply dissoc body ignore)
                               :throw-exceptions false}
-                             options))]
+                             options
+                             (when change-model
+                               {:query {:change_model model-name}})))]
     (if (xn/stored? result)
       (first result)
       (do
@@ -264,6 +264,11 @@
 
 (defn add-by-externals [data-source & fns]
   (map-to-rels :add (cons (fn [id] {:EXTERNAL_ID (str data-source "/" id)})
+                          (seq fns))))
+
+(defn add-by-multi-externals [data-source & fns]
+  (map-to-rels :add (cons (fn [id] {:EXTERNAL_ID (str data-source "/" id)
+                                    :ALLOW_MULTI true})
                           (seq fns))))
 
 
