@@ -99,19 +99,19 @@
 (defn create-unique [opts records]
   (->> records
        vec-wrap
-       (map #(create-one-unique opts %))
+       ((:map-fn opts map) #(create-one-unique opts %))
        (into {})))
 
 (defn create [opts records]
   (->> records
        vec-wrap
-       (map #(create-one opts %))
+       ((:map-fn opts map) #(create-one opts %))
        set))
 
 (defn update [options records]
   (->> records
        vec-wrap
-       (map #(update-one options %))
+       ((:map-fn options map) #(update-one options %))
        (into {})))
 
 (defn map-to-rels [add-or-set fns]
@@ -206,7 +206,7 @@
 (defn extract-one [& {:as opts}]
   (extract-one* opts))
 
-(defn extract [& {:as opts :keys [run run-opts reader skip-rows]
+(defn extract [& {:as opts :keys [run run-opts reader skip-rows parallel]
                   :or {skip-rows 0}}]
   (fn [records & {:keys [filename notes execute offset limit import]
                   :or {offset skip-rows limit 99999999}}]
@@ -218,13 +218,14 @@
                        (create-one {:model :import :options {:throw-exceptions true}}
                                    {:filename filename :notes notes})))
           extractor (extract-one* (assoc opts :import import))]
-      (let [results (->> records
+      (let [map-fn (if parallel pmap map)
+            results (->> records
                          vec-wrap
                          (drop offset)
                          (take limit)
                          (map extractor))]
         (if (and run execute)
-          (run run-opts results)
+          (run (merge {:map-fn map-fn} run-opts) results)
           results)))))
 
 ; TODO: remove references to extract-records
