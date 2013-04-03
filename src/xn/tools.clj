@@ -1,5 +1,6 @@
 (ns xn.tools
-  (:require [clojure.string :as s]))
+  (:require [clojure.string :as s]
+            [clojure.walk :refer [postwalk]]))
 
 (defn non-unique [data]
   (last (reduce (fn [[seen multi] x]
@@ -73,3 +74,64 @@
         (map? x) [x]
         (nil? x) []
         :else [x]))
+
+(defmulti recursive-merge (fn [a b]
+                            (cond
+                              (and a b) [(class a) (class b)]
+                              a [(class a) (class a)]
+                              b [(class b) (class b)])))
+(defmethod recursive-merge [java.util.Map java.util.Map] [a b]
+  (merge-with recursive-merge a b))
+(defmethod recursive-merge [java.util.Set java.util.Set] [a b]
+  (clojure.set/union a b))
+(defmethod recursive-merge [java.util.Collection java.util.Collection] [a b]
+  (concat a b))
+(defmethod recursive-merge :default [a b]
+  b)
+
+(defmulti -validator class)
+(remove-all-methods -validator)
+(defmethod -validator :default [x] nil)
+(defmethod -validator clojure.lang.Keyword [x] x)
+(defmethod -validator java.util.Map [x]
+  (->> x
+       (filter (fn [[k v]] v))
+       (remove (fn [[k v]] (and (coll? v) (empty? v))))
+       (into {})))
+(defmethod -validator java.util.Collection [x]
+  (cond
+    (every? coll? x) (reduce recursive-merge x)
+    (and (= 2 (count x)) (every? keyword? x)) nil
+    :else x))
+
+
+(defmulti charset-ok? class)
+(defmethod charset-ok? :default [x] (-validator x))
+(defmethod charset-ok? (class "") [s]
+  ; I'm not sure which characters should be considered invalid so this is just
+  ; a guestimation.
+  (let [s (->> s (map int) (remove #(< 8 % 255)))]
+    (if (empty? s) nil (set s))))
+
+(defn validates [validator]
+  (fn [records]
+    (->> records
+         (map #(postwalk validator %))
+         (reduce recursive-merge))))
+
+(comment
+  (remove-all-methods charset-ok?) ; use to reset on method removal
+  ((validates charset-ok?) [{:a "ok"}])
+  (clojure.pprint/pprint
+    ((validates charset-ok?) [{:a [{:b "abc" :c "áº≥Ω"
+                                    :d (str (char 0) \a \a \½ \b \¿ \c (char 8216) \d \e)}
+                                   {:e "ok"}
+                                   {:f [{:g "ok"
+                                         :i (str \a \a \½ \b \¿ \c (char 8216) \d \e)}]}]
+                               :h "ok"}
+                              {:a [{:b "abc" :d "áº≥Ω"
+                                    :c (str (char 0) \a \a \½ \b \¿ \c (char 8216) \d \e)}
+                                   {:e "ok"}
+                                   {:f [{:g "ok"
+                                         :i (str \a \a \½ \b \¿ \c (char 8216) \d \e)}]}]
+                               :h "ok"}])))
