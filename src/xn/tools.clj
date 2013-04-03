@@ -47,6 +47,10 @@
 (defn lower-case [s]
   (when s (s/lower-case (str s))))
 
+(defn fix-invalid-chars [mapping]
+  (fn [text]
+    (s/join (map #(mapping % %) text))))
+
 (defn key-mapper
   ([fn-map]
    (key-mapper fn-map identity))

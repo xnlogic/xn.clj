@@ -2,7 +2,23 @@
   (:use xn.import xn.repl)
   (:require [xn.client :refer [get-path-properties]]
             [clojure.string :as s]
-            [xn.tools :refer [vectorize make-set lower-case]]))
+            [xn.tools :refer [vectorize make-set lower-case fix-invalid-chars]]))
+
+(def description-chars
+  {\• "* "
+   \… "..."
+   ;\§ "(section)"
+   \return ""
+   \– "--"
+   \· "-"
+   \ ""
+   \” "\"" ; 8220
+   \“ "\"" ; 8221
+   \½ "1/2"
+   \¿ "?"
+   (char 8216) "'"
+   (char 8217) "'"})
+
 
 ; File 01
 (def dc-sites
@@ -201,8 +217,8 @@
 (def hpsa-servers (extract
   :reader json-lines
   :run create
-                    :run-opts {:model #(:class %)
-           :ignore #{:is_hypervisor :management_ip :primary_ip :class}}
+  :run-opts {:model #(:class %)
+             :ignore #{:is_hypervisor :management_ip :primary_ip :class}}
   :pre [:sas_server]
   :fields {:server_id [:external_records :EXTERNAL_ID]
            :display_name :name
@@ -251,6 +267,7 @@
 
 ; File 09 is not imported
 
+
 ; File 10
 (def solutions
   (extract
@@ -280,13 +297,28 @@
               :fields {:id [:EXTERNAL_ID :external_records]
                        :name :name
                        :description :description
-                       :devices :network_devices}
+                       :devices :network_devices
+                       :ccl1 :ccl1}
               :post-merge {:EXTERNAL_ID (external-name "Remedy")
                            :external_records (external "Remedy")
-                           :network_devices (add-by-externals "Remedy" :id)})}
+                           :network_devices (add-by-externals "Remedy" :id)}
+              :filters [#(= (:ccl1 %) "View")]) ; Note: There are a lot of 'System' records that are actually hardware. Try this search: \<InfrastructureSystem\>[^[}]\{-}ccl1":"Hardware/e
+            :description (fix-invalid-chars description-chars)}
     :post-merge {:EXTERNAL_ID (external-name "Remedy")
                  :external_records (external "Remedy")}))
 
+; HPSA records with non-unique IDs
+;
+; [ "HPSA/115160001",
+;   "HPSA/105430001",
+;   "HPSA/100510001",
+;   "HPSA/116800001",
+;   "HPSA/10001",
+;   "HPSA/40001",
+;   "HPSA/50001",
+;   "HPSA/20001",
+;   "HPSA/30001",
+;   "HPSA/160001" ]
 
 (def remedy-projects
   (extract
@@ -300,6 +332,7 @@
              :device_cis :assets}
     :clean  {:id (external "Remedy")
              :name lower-case
+             :description (fix-invalid-chars description-chars)
              :systems
              (extract-rel-records
                :add :system nil
@@ -314,24 +347,6 @@
                              :external_records (external "Remedy")})
              :device_cis (add-by-externals "Remedy" :id)}))
 
-(def description-chars
-  {\• "* "
-   \… "..."
-   ;\§ "(section)"
-   \return ""
-   \– "--"
-   \· "-"
-   \ ""
-   \” "\""
-   \“ "\""
-   \½ "1/2"
-   \¿ "?"
-   (char 8216) "'"
-   (char 8217) "'"})
-
-(defn fix-invalid-chars [mapping]
-  (fn [text]
-    (s/join (map #(mapping % %) text))))
 
 ; Problems must be done with or *after* Incidents and RFCs
 (def remedy-problems
