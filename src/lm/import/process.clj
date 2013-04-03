@@ -9,16 +9,16 @@
    \… "..."
    ;\§ "(section)"
    \return ""
-   \– "--"
+   \– "--" ; 8211
    \· "-"
    \ ""
    \” "\"" ; 8220
    \“ "\"" ; 8221
    \½ "1/2"
    \¿ "?"
+   (char 8222) ","
    (char 8216) "'"
    (char 8217) "'"})
-
 
 ; File 01
 (def dc-sites
@@ -395,7 +395,8 @@
              ;:go_live_date_actual "2006-06-30T00:00:00-04:00",
              :description :description
              :rfcs :rfcs}
-    :clean {:organization (extract-rel-unique :set :customer :name)}
+    :clean {:organization (extract-rel-unique :set :customer :name)
+            :description (fix-invalid-chars description-chars)}
     :post-merge {:external_records (external "Remedy")
                  :rfcs (add-by-externals "Remedy" :id)
                  :support_group (extract-rel-unique :set :support_group :name)}))
@@ -442,6 +443,7 @@
                        :id [:EXTERNAL_ID :external_records]
                        :priority :priority}
               :post-merge {:customer (extract-rel-unique :set :customer :name)
+                           :description (fix-invalid-chars description-chars)
                            :support_group (extract-rel-unique :set :support_group :name)
                            :EXTERNAL_ID (external-name "Remedy")
                            :external_records (external "Remedy")})
@@ -458,9 +460,10 @@
                        :submit_date :submission_date
                        :id [:EXTERNAL_ID :external_records]
                        :project :project}
-              :clean {:customer (extract-rel-unique :set :customer :name)
-                      :external_records (external "Remedy")
-                      :EXTERNAL_ID (external-name "Remedy")})
+              :post-merge {:customer (extract-rel-unique :set :customer :name)
+                           :description (fix-invalid-chars description-chars)
+                           :external_records (external "Remedy")
+                           :EXTERNAL_ID (external-name "Remedy")})
             :device_ciid (external-name "Remedy")}
     ))
 
