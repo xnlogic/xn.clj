@@ -210,43 +210,6 @@
     :run create-unique
     :run-opts {:model #(:class %) :key :name
                :ignore #{:id :hpsa_id :hpsa_status :cc :class :model_number :manufacturer :ips}}
-    :clean {:class class-name-map
-            :ips interfaces-with-ips
-            :manufacturer lower-case
-            :product_name lower-case
-            ; can't downcase this because it was used as-is to generate the key for model-cleanup
-            ;:product_model_or_version lower-case
-            :site lower-case
-            :room lower-case
-            :name lower-case
-            :hpsa_status lower-case
-            :hpsa_id (external "HPSA")
-            :id (external "Remedy")}
-    :merge-rules {:cc vectorize
-                  :location (fn [a b]
-                              (cond
-                                (s/blank? a) b
-                                (s/blank? b) a
-                                :else (str a " - " b)))}
-    :mappings
-    [(fn [device]
-       (cond-> device
-         (cc-map (:cc device)) (assoc ,, :class (cc-map (:cc device)))
-         (not (:model device)) (assoc ,, :model (:model_number device))
-         (:hpsa_id device)     (update-in ,, [:hpsa_id] #(assoc % :status (:hpsa_status device)))))
-     (fn [device]
-       (assoc device :external_records (get-some device :id :hpsa_id)))
-     (fn [device]
-       (let [[manufacturer model class :as found] (model-cleanup ((juxt :manufacturer :model) device))]
-         (merge
-           (if found
-             (assoc device :class class)
-             device)
-           (model-record (or manufacturer (:manufacturer device))
-                         (or model (:model device))
-                         (:model_number device)))))]
-    :post-merge {:location (extract-rel-unique :add :location :name) }
-    :filters [:class]
     :fields {:class                      :class
              :ccl1                       :cc
              :ccl2                       :cc
@@ -281,4 +244,41 @@
              :hpsa_id                    :hpsa_id
              :hpsa_status                :hpsa_status
              :ips                        :interfaces}
+    :clean {:class class-name-map
+            :ips interfaces-with-ips
+            :manufacturer lower-case
+            :product_name lower-case
+            ; can't downcase this because it was used as-is to generate the key for model-cleanup
+            ;:product_model_or_version lower-case
+            :site lower-case
+            :room lower-case
+            :name lower-case
+            :hpsa_status lower-case
+            :hpsa_id (external "HPSA")
+            :id (external "Remedy")}
+    :merge-rules {:cc vectorize
+                  :location (fn [a b]
+                              (cond
+                                (s/blank? a) b
+                                (s/blank? b) a
+                                :else (str a " - " b)))}
+    :post-merge {:location (extract-rel-unique :add :location :name) }
+    :mappings
+    [(fn [device]
+       (cond-> device
+         (cc-map (:cc device)) (assoc ,, :class (cc-map (:cc device)))
+         (not (:model device)) (assoc ,, :model (:model_number device))
+         (:hpsa_id device)     (update-in ,, [:hpsa_id] #(assoc % :status (:hpsa_status device)))))
+     (fn [device]
+       (assoc device :external_records (get-some device :id :hpsa_id)))
+     (fn [device]
+       (let [[manufacturer model class :as found] (model-cleanup ((juxt :manufacturer :model) device))]
+         (merge
+           (if found
+             (assoc device :class class)
+             device)
+           (model-record (or manufacturer (:manufacturer device))
+                         (or model (:model device))
+                         (:model_number device)))))]
+    :filters [:class]
     ))
