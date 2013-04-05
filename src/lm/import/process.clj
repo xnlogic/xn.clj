@@ -178,18 +178,36 @@
               :interfaces :interfaces
               :device_model_type         :class
               :device_model      [:model :class])
-    :clean {:interfaces (extract-rel-records :add :interface nil
-                          :fields {:class nil
-                                   :id :id
-                                   :name :name
-                                   :direction :direction
-                                   :type nil  ; TODO not sure about this
-                                   :speed :speed
-                                   :duplex :duplex
-                                   :media :cable_type
-                                   :device nil }
-                          :clean {:id (external "NMDB-IFace")
-                                  :media (fn [v] ({"1000T" "CAT6"} v v))})
+    :clean {:interfaces
+            (extract-rel-records
+              :add :interface nil
+              :fields {:class nil
+                       :id :id
+                       :ip :ip
+                       :dns :dns
+                       :name :name
+                       :direction :direction
+                       :type nil  ; TODO not sure about this
+                       :speed :speed
+                       :duplex :duplex
+                       :media :cable_type
+                       :device nil }
+              :clean {:id (external "NMDB-IFace")
+                      :media (fn [v] ({"1000T" "CAT6"} v v))}
+              :mappings [(fn [r]
+                           (if (:ip r)
+                             (let [ip {:CREATE :ip :name (:ip r)}
+                                   ip (if (:dns r)
+                                        (assoc ip :dns_entries
+                                               {:add {:CREATE :dns_entry
+                                                      :name (:dns r)
+                                                      :UNIQUE :name}})
+                                        ip)]
+                               (-> r
+                                   (assoc :ip {:add ip})
+                                   (dissoc :dns)))
+                             r))]
+              )
             :EXTERNAL_ID (external-name "Remedy")
             :ciid (external "Remedy")
             :id (external "NMDB-Device")
@@ -205,8 +223,7 @@
                            (if (= "n/a" zone)
                              (@pod-zone->id [datacenter pod])
                              (@pod-zone->id [datacenter pod zone]))))}
-    :filters [:class]
-    ))
+    :filters [:class]))
 
 (def ifaces-with-ip
   (extract-rel-records :add :interface nil
@@ -264,7 +281,7 @@
                  :name (fn [v]
                          (try ((comp long read-string str) v)
                            (catch Exception e nil)))
-                 :DNS (extract-rel-unique :add :dns_entry :name)}))
+                 :dns_entries (extract-rel-unique :add :dns_entry :name)}))
 
 ; File 09 is not imported
 
@@ -391,8 +408,8 @@
              :submitter :submitter
              :submit_date :submission_date
              :support_group :support_group
-             ;:go_live_date_proposed "2005-06-30T00:00:00-04:00",
-             ;:go_live_date_actual "2006-06-30T00:00:00-04:00",
+             :go_live_date_proposed :go_live_date_proposed
+             :go_live_date_actual   :go_live_date_actual
              :description :description
              :rfcs :rfcs}
     :clean {:organization (extract-rel-unique :set :customer :name)
@@ -440,7 +457,7 @@
                        :short_description :description
                        :urgency :urgency
                        :submit_date :submission_date
-                       :id [:EXTERNAL_ID :external_records]
+                       :id [:EXTERNAL_ID :external_records :name]
                        :priority :priority}
               :post-merge {:customer (extract-rel-unique :set :customer :name)
                            :description (fix-invalid-chars description-chars)
@@ -458,7 +475,7 @@
                        :short_description :description
                        :submitter_full_name nil
                        :submit_date :submission_date
-                       :id [:EXTERNAL_ID :external_records]
+                       :id [:EXTERNAL_ID :external_records :name]
                        :project :project}
               :post-merge {:customer (extract-rel-unique :set :customer :name)
                            :description (fix-invalid-chars description-chars)
@@ -479,5 +496,6 @@
     :run-opts {:model :datacenter :key :name}
     :fields {:name :name
              :subnets :subnets}
-    :clean {:subnets
-            (extract-rel-unique :add :subnet :network_address)}))
+    :clean {:name #(clojure.string/replace-first % #"St Catharines" "St-Catharines")
+            :subnets
+            (map-to-rels :add [(fn [net-addr] {:network_address net-addr :ALLOW_MULTI true})])}))
