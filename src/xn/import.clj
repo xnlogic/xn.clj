@@ -129,6 +129,15 @@
                          {:CREATE model-name, :UNIQUE field, field value}))
                      fns)))
 
+(defn extract-rel-unique+ [add-or-set model-name field & fns]
+  {:pre [model-name field]}
+  (map-to-rels add-or-set
+               (cons (fn [value]
+                       (when value
+                         {:CREATE model-name, :UNIQUE field :ALLOW_MULTI true
+                          field value}))
+                     fns)))
+
 (defn extract-rel-non-unique [add-or-set model-name field & fns]
   {:pre [model-name field]}
   (map-to-rels add-or-set
@@ -208,8 +217,8 @@
 
 (defn extract [& {:as opts :keys [run run-opts reader skip-rows parallel]
                   :or {skip-rows 0}}]
-  (fn [records & {:keys [filename notes execute offset limit import]
-                  :or {offset skip-rows limit 99999999}}]
+  (fn [records & {:keys [filename notes execute offset limit import only]
+                  :or {offset skip-rows limit 99999999 only identity}}]
     {:pre [(or records (and filename reader))]}
     (when filename (prn filename :notes notes))
     (let [records (or records (reader filename))
@@ -221,9 +230,10 @@
       (let [map-fn (if parallel pmap map)
             results (->> records
                          vec-wrap
+                         (map extractor)
+                         (filter only)
                          (drop offset)
-                         (take limit)
-                         (map extractor))]
+                         (take limit))]
         (if (and run execute)
           (run (merge {:map-fn map-fn} run-opts) results)
           results)))))
@@ -257,7 +267,7 @@
 
 (defn external-name [data-source]
   (fn [id]
-    (when id (str data-source "/" id))) )
+    (when id (str data-source "/" id))))
 
 (defn set-by-externals [data-source & fns]
   (map-to-rels :set (cons (fn [id] {:EXTERNAL_ID (str data-source "/" id)})
