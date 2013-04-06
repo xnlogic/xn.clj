@@ -238,13 +238,6 @@
           (run (merge {:map-fn map-fn} run-opts) results)
           results)))))
 
-; TODO: remove references to extract-records
-(defn extract-records
-  ([fields records]
-   ((extract :fields fields) records))
-  ([clean-rules merge-rules fields records]
-   ((extract :clean clean-rules :merge merge-rules :fields fields) records)))
-
 (defn extract-rel-records [add-or-set model-name uniques & extract-rules]
   {:pre [add-or-set model-name]}
   (fn [records]
@@ -282,30 +275,6 @@
                                     :ALLOW_MULTI true})
                           (seq fns))))
 
-
-; -------------------------------------------------------------------------
-; These should not be needed very often. Much clearer to build up a nested
-; object that defines or finds all of the related elements in one request.
-
-(defn set-one-rels
-  "Use this when you already know the id of the related record"
-  [fields records]
-  (reduce (fn [records [field rels]]
-            (map (fn [r] (update-in r [field] rels)) records))
-          records
-          fields))
-
-(defn add-many-rels
-  "Use this when you already know the id of the related record"
-  [fields records]
-  (reduce (fn [records [field rels]]
-            (map (fn [r] (update-in
-                           r [field]
-                           (fn [values]
-                             {:add (map rels values)})))
-                 records))
-          records
-          fields))
 
 ; -------------------------------------------------------------------------
 ; Built these before I added the ability to post nested elements or URLs like
