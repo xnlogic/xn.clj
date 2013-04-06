@@ -5,20 +5,27 @@
             [xn.tools :refer [vectorize make-set lower-case fix-invalid-chars]]))
 
 (def description-chars
-  {\• "* "
-   \… "..."
-   ;\§ "(section)"
-   \return ""
-   \– "--" ; 8211
-   \· "-"
-   \ ""
-   \” "\"" ; 8220
-   \“ "\"" ; 8221
-   \½ "1/2"
-   \¿ "?"
-   (char 8222) ","
-   (char 8216) "'"
-   (char 8217) "'"})
+  (merge
+    {(char 160) " "
+     (char 173) "-"
+     \• "* "  ; 8226
+     \… "..." ; 8230
+     ;\§ "(section)"
+     \– "--" ; 8211
+     \· "-"
+     \” "\"" ; 8220
+     \“ "\"" ; 8221
+     \½ "1/2"
+     ;\¿ "?"
+     (char 8222) ","
+     (char 8216) "'"
+     (char 8217) "'"}
+    (dissoc
+      (->> (range 1 32)
+           (map (fn [n] [(char n) ""]))
+           (into {})
+           )
+      \tab \newline)))
 
 ; File 01
 (def dc-sites
@@ -393,6 +400,7 @@
             :id (external "Remedy")
             :organization (extract-rel-unique :add :customer :name)
             :support_group (extract-rel-unique :add :support_group :name)
+            :short_description (fix-invalid-chars description-chars)
             :description (fix-invalid-chars description-chars)
             }
     ))

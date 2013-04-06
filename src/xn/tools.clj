@@ -110,8 +110,17 @@
 (defmethod charset-ok? (class "") [s]
   ; I'm not sure which characters should be considered invalid so this is just
   ; a guestimation.
-  (let [s (->> s (map int) (remove #(< 8 % 255)))]
+  (let [s (->> s (map int) (remove #(or (#{8 13} %) (< 32 % 128))))]
     (if (empty? s) nil (set s))))
+
+(defn bad-strings [matcher]
+  (fn [x]
+    (if (string? x)
+      (let [found (re-seq matcher x)]
+        (if (seq found)
+          (set found)
+          nil))
+      (-validator x))))
 
 (defn validates [validator]
   (fn [records]
@@ -121,6 +130,9 @@
 
 (comment
   (remove-all-methods charset-ok?) ; use to reset on method removal
+  ((validates (bad-strings #"o.*ps")) [{:a "ok" :b "snoops place"}
+                                      {:a "no" :b "another psi"}
+                                      {:c {:d "oops"}}])
   ((validates charset-ok?) [{:a "ok"}])
   (clojure.pprint/pprint
     ((validates charset-ok?) [{:a [{:b "abc" :c "áº≥Ω"
