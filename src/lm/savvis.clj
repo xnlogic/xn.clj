@@ -163,10 +163,3 @@
                      (seq exts) (assoc :external_records
                                        {:add exts})
                      true (dissoc :savvis-name :ciid))))]))
-
-
-(comment
-  (create-data-sources "savvis_ciid" "savvis_hostname")
-  (pprint (first (mix-with-existing (first files))))
-  (pprint (first (vms nil :filename (first files) :execute false)))
-  (pprint (mapcat #(vms nil :filename % :execute true) files)))

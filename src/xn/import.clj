@@ -146,6 +146,8 @@
                (cons (fn [value] {:CREATE model-name, field value})
                      fns)))
 
+(declare extract)
+
 (defn extract-rel-records
   "The full power of extract for rels"
   [add-or-set model-name uniques & extract-rules]
