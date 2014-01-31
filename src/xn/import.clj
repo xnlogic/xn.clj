@@ -121,7 +121,9 @@
     (when records
       {add-or-set (map (apply comp fns) (vec-wrap records))})))
 
-(defn extract-rel-unique [add-or-set model-name field & fns]
+(defn extract-rel-unique
+  "Map a value to the field in a related record, with optional fns to pre-process the value."
+  [add-or-set model-name field & fns]
   {:pre [model-name field]}
   (map-to-rels add-or-set
                (cons (fn [value]
@@ -144,6 +146,18 @@
                (cons (fn [value] {:CREATE model-name, field value})
                      fns)))
 
+(defn extract-rel-records
+  "The full power of extract for rels"
+  [add-or-set model-name uniques & extract-rules]
+  {:pre [add-or-set model-name]}
+  (fn [records]
+    {add-or-set (->> records
+                     vec-wrap
+                     ((apply extract extract-rules))
+                     (map #(merge {:CREATE model-name}
+                                  (when uniques {:UNIQUE uniques})
+                                  %)))}))
+
 (defn- extract-one* [{:keys [pre row clean merge-rules fields template mappings
                              filters post-merge import]
                       :or {clean {} merge-rules {} template {} mappings []
@@ -156,7 +170,7 @@
   (let [fields (or fields (remove nil? row))
         fields (if (map? fields)
                  (filter (fn [[from to]] to) fields)
-                 (into {} (map vector fields fields)))]
+                 (zipmap fields fields))]
     (letfn [(apply-pre-fns [data]
               (reduce (fn [data f] (f data)) data pre))
             (make-maps-from-rows [data]
@@ -237,16 +251,6 @@
         (if (and run execute)
           (run (merge {:map-fn map-fn} run-opts) results)
           results)))))
-
-(defn extract-rel-records [add-or-set model-name uniques & extract-rules]
-  {:pre [add-or-set model-name]}
-  (fn [records]
-    {add-or-set (->> records
-                     vec-wrap
-                     ((apply extract extract-rules))
-                     (map #(merge {:CREATE model-name}
-                                  (when uniques {:UNIQUE uniques})
-                                  %)))}))
 
 (defn external [data-source]
   (fn [id]

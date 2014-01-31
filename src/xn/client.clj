@@ -3,8 +3,8 @@
             [clojure.string :as s]
             [clj-http.client :as client]))
 
-(def *url-root (atom "http://localhost:8080/v1"))
-(def *token    (atom (get (System/getenv) "LMTOKEN")))
+(defonce *url-root (atom "http://localhost:8080/v1"))
+(defonce *token    (atom (get (System/getenv) "LMTOKEN")))
 
 (defn setup [& {:keys [url token]}]
   (when url
@@ -27,12 +27,15 @@
          command
          (when-let [body (:body command)]
            {:body (json/write-str body)})
+         (when (re-find #"\?" (:url command))
+           (throw (RuntimeException. "Query string should be in the :query option")))
          {:url (when-let [url (:url command)]
-                 (when (re-find #"^http" url) (throw ()))
+                 (when (re-find #"^http" url) (throw (RuntimeException. "URL should be a relative path")))
                  (str
                    (join-url @*url-root (:url command) ".edn")
-                   (when (:query command)
-                     (str "?" (s/join "&" (map #(s/join "=" (map name %)) (:query command)))))))}))
+                   (when (seq (:query command))
+                     (str "?" (s/join "&" (map #(s/join "=" (map name %))
+                                               (:query command)))))))}))
 
 (defn make-request [command]
   (binding [*read-eval* false]
@@ -42,11 +45,14 @@
       :body
       (#(try (read-string %)
           (catch Exception e
-            (prn "invalid string" %)
+            (println "unable to read-string: ")
+            (prn %)
             {:response %}))))))
 
 (defn get-vec [url]
-  (make-request {:method :get :url url}))
+  (make-request (cond (string? url) {:method :get :url url}
+                      (map? url) (assoc url :method :get)
+                      :else (throw (RuntimeException. (str "Unknown url type: " (type url)))))))
 
 (defn get-one [url]
   (first (get-vec url)))
