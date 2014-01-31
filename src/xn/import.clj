@@ -131,7 +131,9 @@
                          {:CREATE model-name, :UNIQUE field, field value}))
                      fns)))
 
-(defn extract-rel-unique+ [add-or-set model-name field & fns]
+(defn extract-rel-unique+
+  "Like extract-rel-unique but does not enforce uniqueness of existing records"
+  [add-or-set model-name field & fns]
   {:pre [model-name field]}
   (map-to-rels add-or-set
                (cons (fn [value]

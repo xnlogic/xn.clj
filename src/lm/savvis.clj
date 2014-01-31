@@ -85,17 +85,16 @@
     (let [ext-name (->ext-name (field item))
           exts (get-in item [:existing-vm :rel :external_records])
           ext (some #(when (= (:name %) ext-name) %) exts)]
-      ;(pprint [(:name item) ext-name ext (count exts)])
       (if ext
         ; remove the external from both places. leftover external records will be deleted and
         ; leftover values in the field will be created.
         (-> item
             (dissoc field)
-            (update-in [:rel :external_records] #(remove #{ext} %)))
+            (update-in [:existing-vm :rel :external_records] #(remove #{ext} %)))
         item))))
 
 (defn existing-vms [items]
-  (let [vms (xn/get-map :name {:url "/model/vm" :query {:format "full,full"}})]
+  (let [vms (xn/get-map :name {:url "/model/cloud_vm" :query {:format "full,full"}})]
     (->> items
          (map (fn [{:as item :keys [name]}]
            (assoc item :existing-vm (vms name))))
@@ -104,13 +103,18 @@
 
 (defn ip-iface [field iface-name]
   (fn [{:as item :keys [existing-vm]}]
-    (pprint (get-in existing-vm [:rel :interfaces]))
-    (if (some (fn [iface]
-                (some #(= (field item) (:name %))
-                      (get-in iface [:rel :ip])))
-              (get-in existing-vm [:rel :interfaces]))
-      (dissoc item field)
-      item)))
+    (let [iface (some (fn [iface] (when (= iface-name (:name iface)) iface))
+                      (get-in existing-vm [:rel :interfaces]))]
+      (cond
+        (and iface (= (field item) (get-in iface [:rel :ip :name])))
+        (dissoc item field)
+        iface
+        (-> item
+            (dissoc field)
+            (update-in [:change-ips] conj {:url (get-in iface [:meta :xnid])
+                                           :ip (field item)}))
+        :else
+        item))))
 
 (defn mix-with-existing [file]
   (->> file
@@ -118,18 +122,17 @@
        existing-vms ; full,full to also get externals and ifaces and software
        (map ->network-address)
        (map (ip-iface :ip "eth0"))
-       (map (ip-iface :nat-ip "nat"))
-       ))
+       (map (ip-iface :nat-ip "nat"))))
 
 (def vms
   (extract
     :reader mix-with-existing
     :run create-unique
-    :run-opts {:model :vm :key :name
+    :run-opts {:model :cloud_vm :key :name
                :ignore #{}}
     :pre [#(cond-> %
-             :ip (assoc :interfaces [(select-keys % [:ip :network-address :subnet-name])])
-             :nat-ip (assoc :nat-ifaces [(select-keys % [:nat-ip])])
+             (:ip %) (assoc :interfaces [(select-keys % [:ip :network-address :subnet-name])])
+             (:nat-ip %) (assoc :nat-ifaces [(select-keys % [:nat-ip])])
              true (dissoc :ip :network-address :subnet-name :nat-ip))]
     :fields (conj (keys fields) :interfaces :nat-ifaces )
     :clean {:cpu #(Integer/parseInt %)
@@ -162,4 +165,33 @@
                    (cond-> vm
                      (seq exts) (assoc :external_records
                                        {:add exts})
-                     true (dissoc :savvis-name :ciid))))]))
+                     true (dissoc :savvis-name :ciid))))
+               (fn [{:as vm :keys [interfaces nat-ifaces]}]
+                 (dissoc
+                   (cond
+                     (and interfaces nat-ifaces)
+                     (update-in vm [:interfaces :add] conj (first (:add nat-ifaces)))
+                     nat-ifaces
+                     (assoc vm :interfaces nat-ifaces)
+                     :else vm)
+                   :nat-ifaces))]))
+
+(defn invalid-external-records [records]
+  (->> records
+       (mapcat #(get-in % [:existing-vm :rel :external_records]))
+       (map #(get-in % [:meta :xnid]))))
+
+(defn remove-invalid-external-records [records]
+  (doseq [xnid (invalid-external-records records)]
+    (xn/make-request {:method :delete :url xnid})))
+
+(defn update-changed-ips [records]
+  )
+
+(defn run-import [files]
+  (create-data-sources "savvis_ciid" "savvis_hostname")
+  (doseq [file files]
+    (let [records (mix-with-existing file)]
+      (vms records :execute true)
+      (update-changed-ips records)
+      (remove-invalid-external-records records))))
