@@ -57,11 +57,14 @@
    (key-mapper fn-map identity))
   ([fn-map default]
    (fn [r]
-     (into {}
-           (map (fn [[key value]]
-                  (when value
-                    [key ((fn-map key (:default fn-map default)) value)]))
-                r)))))
+     (when r
+       (when-not (map? r)
+         (throw (RuntimeException. (str "key-mapper must be given a map" (pr-str r)))))
+       (into {}
+             (map (fn [[key value]]
+                    (when value
+                      [key ((fn-map key (:default fn-map default)) value)]))
+                  r))))))
 
 (defn get-some [map & keys]
   (let [values (remove nil? ((apply juxt keys) map))]

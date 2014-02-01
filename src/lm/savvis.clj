@@ -38,11 +38,6 @@
             {}
             fields)))
 
-(defn computes [file]
-  (->> (clojure.java.io/input-stream file)
-       find-items
-       (map (item-fields fields))))
-
 (def mask
   {"255.0.0.0" 8
    "255.128.0.0" 9
@@ -80,6 +75,12 @@
                   (mask subnet-mask)))
       (dissoc :default-gw :subnet-mask)))
 
+(defn computes [file]
+  (->> (clojure.java.io/input-stream file)
+       find-items
+       (map (item-fields fields))
+       (map ->network-address)))
+
 (defn existing-external [field ->ext-name]
   (fn [item]
     (let [ext-name (->ext-name (field item))
@@ -105,7 +106,8 @@
   (fn [{:as item :keys [existing-vm]}]
     (let [ifaces (map (fn [iface] [(:name iface) (get-in iface [:rel :ip :name]) iface])
                       (get-in existing-vm [:rel :interfaces]))
-          ip-exists? (set (map second ifaces))]
+          ip-exists? (set (map second ifaces))
+          iface (some #(when (= iface-name (second %)) (last %)) ifaces)]
       (cond
         (ip-exists? (field item))
         (dissoc item field)
@@ -117,20 +119,17 @@
         :else
         item))))
 
-(defn mix-with-existing [file]
-  (->> file
-       computes
+(defn mix-with-existing [records]
+  (->> records
        existing-vms ; full,full to also get externals and ifaces and software
-       (map ->network-address)
        (map (ip-iface :ip "eth0"))
        (map (ip-iface :nat-ip "nat"))))
 
 (def create-vms
   (extract
-    :reader mix-with-existing
+    :reader (comp mix-with-existing computes)
     :run create-unique
-    :run-opts {:model :cloud_vm :key :name
-               :ignore #{}}
+    :run-opts {:model :cloud_vm :key :name}
     :pre [#(cond-> %
              (:ip %) (assoc :interfaces [(select-keys % [:ip :network-address :subnet-name])])
              (:nat-ip %) (assoc :nat-ifaces [(select-keys % [:nat-ip])])
@@ -189,18 +188,32 @@
 (def update-changed-ips
   (extract
     :run update
+    :pre #(mapcat :change-ips %)
     :run-opts {:url :url :ignore [:url]}
     :fields [:ip :url]
     :clean {:ip (extract-rel-unique :set :ip :name)}))
 
-(defn add-subnets-to-ips [records]
-  )
+(defn subnet-ips [records]
+  (->> records
+       (group-by #(select-keys % [:network-address :subnet-name]))
+       (map (fn [[k group]] (assoc k :ips (map :ip group))))))
+
+(def add-subnets-to-ips
+  (extract
+    :run create-unique
+    :run-opts {:model :subnet :key :network_address}
+    :fields {:network-address :network_address
+             :subnet-name :name
+             :ips :ips}
+    :clean {:ips (extract-rel-unique :add :ip :name)}
+    ))
 
 (defn run-import [files]
   (create-data-sources "savvis_ciid" "savvis_hostname")
   (doseq [file files]
-    (let [records (mix-with-existing file)]
-      (create-vms records :execute true)
-      (update-changed-ips (mapcat :change-ips records) :execute true)
-      (add-subnets-to-ips records)
-      (remove-invalid-external-records records))))
+    (let [records (computes file)
+          mixed (mix-with-existing file)]
+      (create-vms mixed :execute true)
+      (update-changed-ips (mapcat :change-ips mixed) :execute true)
+      (add-subnets-to-ips (subnet-ips records) :execute true)
+      (remove-invalid-external-records mixed))))
