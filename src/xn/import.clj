@@ -44,8 +44,8 @@
 
 (defn update-one [{:keys [url ignore errors options]} body]
   {:pre [(map? body)
-         (if (fn? url) (url body) url)]}
-  (let [url (if (fn? url) (url body) url)
+         (if (ifn? url) (url body) url)]}
+  (let [url (if (ifn? url) (url body) url)
         result (xn/execute (merge
                              {:method :patch
                               :url url
