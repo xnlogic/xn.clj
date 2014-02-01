@@ -103,10 +103,11 @@
 
 (defn ip-iface [field iface-name]
   (fn [{:as item :keys [existing-vm]}]
-    (let [iface (some (fn [iface] (when (= iface-name (:name iface)) iface))
-                      (get-in existing-vm [:rel :interfaces]))]
+    (let [ifaces (map (fn [iface] [(:name iface) (get-in iface [:rel :ip :name]) iface])
+                      (get-in existing-vm [:rel :interfaces]))
+          ip-exists? (set (map second ifaces))]
       (cond
-        (and iface (= (field item) (get-in iface [:rel :ip :name])))
+        (ip-exists? (field item))
         (dissoc item field)
         iface
         (-> item
@@ -124,7 +125,7 @@
        (map (ip-iface :ip "eth0"))
        (map (ip-iface :nat-ip "nat"))))
 
-(def vms
+(def create-vms
   (extract
     :reader mix-with-existing
     :run create-unique
@@ -185,13 +186,21 @@
   (doseq [xnid (invalid-external-records records)]
     (xn/make-request {:method :delete :url xnid})))
 
-(defn update-changed-ips [records]
+(def update-changed-ips
+  (extract
+    :run update
+    :run-opts {:url :url :ignore [:url]}
+    :fields [:ip :url]
+    :clean {:ip (extract-rel-unique :set :ip :name)}))
+
+(defn add-subnets-to-ips [records]
   )
 
 (defn run-import [files]
   (create-data-sources "savvis_ciid" "savvis_hostname")
   (doseq [file files]
     (let [records (mix-with-existing file)]
-      (vms records :execute true)
-      (update-changed-ips records)
+      (create-vms records :execute true)
+      (update-changed-ips (mapcat :change-ips records) :execute true)
+      (add-subnets-to-ips records)
       (remove-invalid-external-records records))))
