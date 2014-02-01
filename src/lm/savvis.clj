@@ -95,6 +95,7 @@
         item))))
 
 (defn existing-vms [items]
+  ; full,full to also get externals and ifaces and software
   (let [vms (xn/get-map :name {:url "/model/cloud_vm" :query {:format "full,full"}})]
     (->> items
          (map (fn [{:as item :keys [name]}]
@@ -121,7 +122,7 @@
 
 (defn mix-with-existing [records]
   (->> records
-       existing-vms ; full,full to also get externals and ifaces and software
+       existing-vms
        (map (ip-iface :ip "eth0"))
        (map (ip-iface :nat-ip "nat"))))
 
@@ -188,7 +189,6 @@
 (def update-changed-ips
   (extract
     :run update
-    :pre #(mapcat :change-ips %)
     :run-opts {:url :url :ignore [:url]}
     :fields [:ip :url]
     :clean {:ip (extract-rel-unique :set :ip :name)}))
@@ -212,7 +212,7 @@
   (create-data-sources "savvis_ciid" "savvis_hostname")
   (doseq [file files]
     (let [records (computes file)
-          mixed (mix-with-existing file)]
+          mixed (mix-with-existing records)]
       (create-vms mixed :execute true)
       (update-changed-ips (mapcat :change-ips mixed) :execute true)
       (add-subnets-to-ips (subnet-ips records) :execute true)
