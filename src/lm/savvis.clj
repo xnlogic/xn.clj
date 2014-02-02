@@ -23,6 +23,7 @@
    :ip "./ipAddr"                     ; first iface. eth0 same change rules as nat
 
    :nat-ip "./natIP"                  ; virtual iface name: nat. if ip changes, make new ip record and change rel
+   :nat "./nat"                       ; true/false indicating presence of a nat
 
    :software "./osLabel"                    ; software, change = new record (standard importer rule)
    })
@@ -79,7 +80,11 @@
   (->> (clojure.java.io/input-stream file)
        find-items
        (map (item-fields fields))
-       (map ->network-address)))
+       (map ->network-address)
+       (map (fn [{:as item :keys [nat]}]
+              (cond-> item
+                (= "false" nat) (dissoc :nat-ip)
+                true (dissoc :nat))))))
 
 (defn existing-external [field ->ext-name]
   (fn [item]
