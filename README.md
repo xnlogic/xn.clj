@@ -43,7 +43,7 @@ The extract function
 
 ## LightMesh
 
-Code designed for the [http://lightmesh.com](LightMesh) domain is under
+Code designed for the [LightMesh](http://lightmesh.com) domain is under
 the `lm` namespace. 
 
 ```clojure
