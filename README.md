@@ -5,7 +5,8 @@ manipulating data via the [http://xnlogic.com](XN Logic) API
 
 ## Usage
 
-Ensure that you have leiningen installed, preferable v2 and run `lein repl`
+Ensure that you have [http://leiningen.org/](Leiningen 2) installed. Run
+`lein repl`
 
 ```clojure
 (require '[xn.client :as xn])
@@ -28,6 +29,8 @@ Ensure that you have leiningen installed, preferable v2 and run `lein repl`
 ## Data Extraction Pipeline
 
 The extract function
+
+TODO high level expl.
 
 1. :reader - (csv, json-file, json-lines, or a custom function that returns a collection of "raw" data records). 
 1. :pre - A vector of functions that are composed in order, to operate on the raw file
