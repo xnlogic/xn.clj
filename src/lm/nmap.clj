@@ -53,6 +53,12 @@
   (extract
     :reader read-nmap-xml
     :run create-unique ; will this create if the model is not the same?
+    :run-opts {:model :unknown_device
+               :key :name :unique_in_parts [:networked]}
+    :pre [#(cond-> %
+             ; if no hostname, use the first IP
+             (not (:name %)) (assoc :name (str "UNKNOWN - "(-> % :interfaces first :ip))))]
+    ; possibly could use mac as external id?
     :fields [:name :software :interfaces]
     :clean {:software (extract-rel-unique :add :software :name)
             :interfaces (extract-rel-records
@@ -61,7 +67,8 @@
                           :clean {:ip (fn [ip] {:name ip})}
                           :post-merge {:ip (extract-rel-records
                                              :set :ip :name
-                                             :fields [:name])})}))
+                                             :fields [:name])})}
+    :filters [:name]))
 
 ; ---- Testing
 
