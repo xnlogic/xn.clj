@@ -88,11 +88,13 @@
       (prn "Unable to create-one" opts body e)
       (.printStackTrace e)))))
 
-(defn create-one-unique [{:keys [model key ignore errors] :as opts} body]
+(defn create-one-unique [{:keys [model key unique_in_parts ignore errors] :as opts} body]
   {:pre [key]}
   (when (and (map? body) (body key))
     [(body key)
-     (create-one (assoc opts :options {:query {:unique (name key)}})
+     (create-one (assoc opts :options {:query (merge {:unique (name key)}
+                                                     (when unique_in_parts
+                                                       {:unique_in_parts (s/join "," (map name unique_in_parts))}))})
                  body)]))
 
 ; create-unique -> {keyvalue id}
