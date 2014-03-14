@@ -37,10 +37,10 @@
         url))))
 
 (defn model-url-matcher [model]
-  (match-url (re-pattern (str #"^/model/" model #"/\d+/?$"))))
+  (match-url (re-pattern (str #"^/model/" model #"/ids?/\d+/?$"))))
 
 (defn record-url-matcher [& parts]
-  (match-url (re-pattern (str #"^/is/" (s/join "," parts) #"/\d+/?$"))))
+  (match-url (re-pattern (str #"^/is/" (s/join "," parts) #"/ids?/\d+/?$"))))
 
 (defn update-one [{:keys [url ignore errors options]} body]
   {:pre [(map? body)
