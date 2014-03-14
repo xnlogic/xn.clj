@@ -89,14 +89,14 @@
 (defn existing-external [field ->ext-name]
   (fn [item]
     (let [ext-name (->ext-name (field item))
-          exts (get-in item [:existing-vm :rel :external_records])
+          exts (get-in item [:existing-vm :external_records])
           ext (some #(when (= (:name %) ext-name) %) exts)]
       (if ext
         ; remove the external from both places. leftover external records will be deleted and
         ; leftover values in the field will be created.
         (-> item
             (dissoc field)
-            (update-in [:existing-vm :rel :external_records] #(remove #{ext} %)))
+            (update-in [:existing-vm :external_records] #(remove #{ext} %)))
         item))))
 
 (defn existing-vms [items]
@@ -110,8 +110,8 @@
 
 (defn ip-iface [field iface-name]
   (fn [{:as item :keys [existing-vm]}]
-    (let [ifaces (map (fn [iface] [(:name iface) (get-in iface [:rel :ip :name]) iface])
-                      (get-in existing-vm [:rel :interfaces]))
+    (let [ifaces (map (fn [iface] [(:name iface) (get-in iface [:ip :name]) iface])
+                      (get-in existing-vm [:interfaces]))
           ip-exists? (set (map second ifaces))
           iface (some #(when (= iface-name (second %)) (last %)) ifaces)]
       (cond
@@ -184,7 +184,7 @@
 
 (defn invalid-external-records [records]
   (->> records
-       (mapcat #(get-in % [:existing-vm :rel :external_records]))
+       (mapcat #(get-in % [:existing-vm :external_records]))
        (map #(get-in % [:meta :xnid]))))
 
 (defn remove-invalid-external-records [records]
