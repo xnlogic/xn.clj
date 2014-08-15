@@ -145,7 +145,7 @@
             :memory #(Integer/parseInt %)
             :ciid (external "savvis_ciid")
             :savvis-name (external "savvis_hostname")
-            :software (extract-rel-unique :set :software :name)
+            :software (extract-rel-unique :add :software :name)
             :interfaces (extract-rel-records
                           :add :interface nil
                           :template {:name "eth0"}
